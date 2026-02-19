@@ -18,8 +18,7 @@ export default function UpcomingEvents({ events, onMarkPaid }: Props) {
   const today = new Date();
   const active = events
     .filter((e) => e.active && !e.paid)
-    .sort((a, b) => a.due_date.localeCompare(b.due_date))
-    .slice(0, 15);
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   if (active.length === 0) {
     return (

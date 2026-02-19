@@ -9,15 +9,17 @@ interface Props {
 
 export default function NextBills({ events }: Props) {
   const today = new Date();
+  const sevenDaysOut = new Date();
+  sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
+  const cutoff = sevenDaysOut.toISOString().slice(0, 10);
+
   const bills = events
-    .filter((e) => e.active && !e.paid && e.type === "bill")
-    .sort((a, b) => a.due_date.localeCompare(b.due_date))
-    .slice(0, 7);
+    .filter((e) => e.active && !e.paid && e.type === "bill" && e.due_date <= cutoff)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   const income = events
-    .filter((e) => e.active && !e.paid && e.type === "income")
-    .sort((a, b) => a.due_date.localeCompare(b.due_date))
-    .slice(0, 4);
+    .filter((e) => e.active && !e.paid && e.type === "income" && e.due_date <= cutoff)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   const totalBillsDue = bills.reduce((sum, e) => sum + e.amount, 0);
   const totalIncome = income.reduce((sum, e) => sum + e.amount, 0);
