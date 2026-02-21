@@ -667,6 +667,8 @@ function EventsManager({
 
 function DangerZone({ onRefresh }: { onRefresh: () => void }) {
   const [confirmText, setConfirmText] = useState("");
+  const [seedBalance, setSeedBalance] = useState("");
+  const [showSeedPrompt, setShowSeedPrompt] = useState(false);
 
   const handleReset = async () => {
     if (confirmText !== "RESET") return;
@@ -675,8 +677,16 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
     onRefresh();
   };
 
-  const handleSeedDemo = async () => {
-    await fetch("/api/seed", { method: "POST" });
+  const handleSeed = async () => {
+    const balance = parseFloat(seedBalance);
+    if (isNaN(balance)) return;
+    await fetch("/api/seed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checking_balance: balance }),
+    });
+    setSeedBalance("");
+    setShowSeedPrompt(false);
     onRefresh();
   };
 
@@ -711,16 +721,48 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
         </div>
 
         <div className="flex-1 space-y-2">
-          <p className="text-sm font-medium text-red-800">Load demo data</p>
+          <p className="text-sm font-medium text-red-800">Load my default bills</p>
           <p className="text-xs text-red-600/70">
-            Replaces everything with sample household data for testing.
+            Replaces everything with your real monthly bills and paycheck. You&apos;ll enter your current checking balance first.
           </p>
-          <button
-            onClick={handleSeedDemo}
-            className="px-4 py-2 text-sm font-semibold text-red-700 border border-red-300 bg-white rounded-lg hover:bg-red-50 transition-colors"
-          >
-            Load Demo Data
-          </button>
+          {!showSeedPrompt ? (
+            <button
+              onClick={() => setShowSeedPrompt(true)}
+              className="px-4 py-2 text-sm font-semibold text-red-700 border border-red-300 bg-white rounded-lg hover:bg-red-50 transition-colors"
+            >
+              Load Default Month
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-red-800">
+                Current checking balance ($)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={seedBalance}
+                  onChange={(e) => setSeedBalance(e.target.value)}
+                  placeholder="e.g. 3200.00"
+                  step="0.01"
+                  autoFocus
+                  className="rounded-lg border border-red-300 px-3 py-2 text-sm w-40 outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <button
+                  onClick={handleSeed}
+                  disabled={!seedBalance || isNaN(parseFloat(seedBalance))}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Seed &amp; Go
+                </button>
+                <button
+                  onClick={() => { setShowSeedPrompt(false); setSeedBalance(""); }}
+                  className="px-3 py-2 text-sm text-red-600 hover:text-red-800 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -936,16 +978,16 @@ function HelpGuide() {
 
         <AccordionSection
           id="reconcile"
-          title="Reconciling Balances"
+          title="Syncing with Your Bank"
           icon={<path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />}
           open={open}
           toggle={toggle}
         >
           <div className="space-y-3 text-sm text-slate-600">
-            <p>Your projected balance will drift from reality. Reconcile to sync:</p>
+            <p>Your projected balance will drift from reality. Sync with your bank to correct it:</p>
             <ol className="list-decimal list-inside space-y-1.5">
               <li>Open your bank app and note the actual balance</li>
-              <li>Click <strong>Reconcile Balance</strong> on the Dashboard (or edit the account here)</li>
+              <li>Click <strong>Sync with Bank</strong> on the Dashboard (or edit the account here)</li>
               <li>Select the account and enter the real number</li>
               <li>All projections recalculate instantly</li>
             </ol>
@@ -985,7 +1027,7 @@ function HelpGuide() {
                 "Review Upcoming Events for the next 14 days",
                 "Add or adjust irregular expenses",
                 "If a dangerous low point shows, decide: move money or defer a flexible bill",
-                "Reconcile your main account with your bank",
+                "Sync your main account with your bank",
               ]}
             />
             <WorkflowBlock
@@ -993,7 +1035,7 @@ function HelpGuide() {
               time="20–30 min"
               color="violet"
               steps={[
-                "Confirm paycheck cleared — Reconcile the account",
+                "Confirm paycheck cleared — Sync the account with your bank",
                 "Review Next 7 Days — fund critical bills first",
                 "Check the projection chart with new income factored in",
                 "Decide your discretionary spending cap until next payday",
@@ -1008,7 +1050,7 @@ function HelpGuide() {
                 "Update changed amounts (new rates, price increases)",
                 "Delete cancelled services, add new ones",
                 "Look for one fixed cost to reduce",
-                "Reconcile all accounts",
+                "Sync all accounts with your bank",
               ]}
             />
           </div>
@@ -1047,7 +1089,7 @@ function HelpGuide() {
             <div className="rounded-lg bg-slate-50 p-3">
               <p className="font-medium text-slate-700">Keep data fresh</p>
               <p className="mt-0.5 text-slate-500">
-                Reconcile every 2–3 days. Mark bills paid when you pay them. Delete events that no longer apply. Stale data = abandoned app.
+                Sync with your bank every 2–3 days. Confirm bills when you pay them. Delete events that no longer apply. Stale data = abandoned app.
               </p>
             </div>
           </div>
@@ -1079,15 +1121,15 @@ function HelpGuide() {
                     ["/api/accounts", "POST", "Create account"],
                     ["/api/accounts", "PUT", "Update account"],
                     ["/api/accounts?id=xxx", "DELETE", "Delete account"],
-                    ["/api/accounts/reconcile", "POST", "Set actual balance"],
+                    ["/api/accounts/sync", "POST", "Sync account with bank balance"],
                     ["/api/events", "GET", "List active events"],
                     ["/api/events", "POST", "Create event"],
                     ["/api/events", "PUT", "Update event"],
                     ["/api/events?id=xxx", "DELETE", "Delete event"],
-                    ["/api/events/mark-paid", "POST", "Mark event paid"],
+                    ["/api/events/mark-paid", "POST", "Confirm event paid with actual amount"],
                     ["/api/projections?days=28", "GET", "Get daily projections"],
                     ["/api/alerts", "GET", "Get current alerts"],
-                    ["/api/seed", "POST", "Load demo data"],
+                    ["/api/seed", "POST", "Seed default month (pass checking_balance)"],
                     ["/api/reset", "POST", "Delete all data"],
                   ].map(([endpoint, method, desc], i) => (
                     <tr key={i}>
@@ -1130,7 +1172,7 @@ function HelpGuide() {
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="font-medium text-slate-700">Data looks stale or wrong</p>
-              <p className="mt-0.5 text-slate-500">Reconcile your account balances. If truly corrupted, use Danger Zone → Clear Everything and re-enter.</p>
+              <p className="mt-0.5 text-slate-500">Sync your account balances with your bank. If truly corrupted, use Danger Zone → Clear Everything and re-enter.</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="font-medium text-slate-700">Projection chart looks flat</p>

@@ -12,6 +12,7 @@ export interface CashEvent {
   name: string;
   type: "income" | "bill";
   amount: number;
+  actual_amount: number | null;
   due_date: string;
   recurrence_rule: string | null;
   priority: "critical" | "normal" | "flexible";
@@ -19,6 +20,27 @@ export interface CashEvent {
   account_id: string | null;
   active: number;
   paid: number;
+  paid_date: string | null;
+  created_at: string;
+}
+
+export interface EventHistory {
+  id: string;
+  event_id: string;
+  amount: number;
+  actual_amount: number;
+  paid_date: string;
+  due_date: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: "expense" | "income";
+  account_id: string;
+  event_id: string | null;
   created_at: string;
 }
 

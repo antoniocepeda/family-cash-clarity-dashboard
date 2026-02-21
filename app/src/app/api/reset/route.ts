@@ -3,6 +3,8 @@ import { getDb } from "@/lib/db";
 
 export async function POST() {
   const db = getDb();
+  db.prepare("DELETE FROM ledger").run();
+  db.prepare("DELETE FROM event_history").run();
   db.prepare("DELETE FROM events").run();
   db.prepare("DELETE FROM accounts").run();
   db.prepare("DELETE FROM alerts").run();

@@ -17,19 +17,29 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [simulatedIds, setSimulatedIds] = useState<Set<string>>(new Set());
 
-  const fetchAll = useCallback(async () => {
+  const fetchProjection = useCallback(async (simIds: Set<string>) => {
+    const params = new URLSearchParams();
+    if (simIds.size > 0) {
+      params.set("simulate_early", Array.from(simIds).join(","));
+    }
+    const res = await fetch(`/api/projections?${params.toString()}`);
+    return res.json();
+  }, []);
+
+  const fetchAll = useCallback(async (simIds?: Set<string>) => {
+    const activeSimIds = simIds ?? simulatedIds;
     try {
-      const [acctRes, evtRes, projRes, alertRes] = await Promise.all([
+      const [acctRes, evtRes, proj, alertRes] = await Promise.all([
         fetch("/api/accounts"),
         fetch("/api/events"),
-        fetch("/api/projections"),
+        fetchProjection(activeSimIds),
         fetch("/api/alerts"),
       ]);
-      const [accts, evts, proj, alts] = await Promise.all([
+      const [accts, evts, alts] = await Promise.all([
         acctRes.json(),
         evtRes.json(),
-        projRes.json(),
         alertRes.json(),
       ]);
       setAccounts(accts);
@@ -42,17 +52,30 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [simulatedIds, fetchProjection]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  const handleMarkPaid = async (id: string) => {
+  const handleSimulateToggle = (id: string) => {
+    setSimulatedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      fetchProjection(next).then(setProjection);
+      return next;
+    });
+  };
+
+  const handleMarkPaid = async (id: string, actualAmount: number) => {
     await fetch("/api/events/mark-paid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, actual_amount: actualAmount }),
     });
     fetchAll();
   };
@@ -75,11 +98,25 @@ export default function Dashboard() {
     fetchAll();
   };
 
-  const handleReconcile = async (id: string, balance: number) => {
-    await fetch("/api/accounts/reconcile", {
+  const handleSyncWithBank = async (id: string, balance: number) => {
+    await fetch("/api/accounts/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, actual_balance: balance }),
+    });
+    fetchAll();
+  };
+
+  const handleLogTransaction = async (data: {
+    description: string;
+    amount: number;
+    type: string;
+    account_id: string;
+  }) => {
+    await fetch("/api/ledger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
     fetchAll();
   };
@@ -129,15 +166,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <UpcomingEvents events={events} onMarkPaid={handleMarkPaid} />
+        <UpcomingEvents
+          events={events}
+          onMarkPaid={handleMarkPaid}
+          simulatedIds={simulatedIds}
+          onSimulateToggle={handleSimulateToggle}
+        />
 
         <div className="border-t border-slate-200 pt-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
           <QuickActions
             accounts={accounts}
             onAddEvent={handleAddEvent}
-            onReconcile={handleReconcile}
+            onReconcile={handleSyncWithBank}
             onAddAccount={handleAddAccount}
+            onLogTransaction={handleLogTransaction}
           />
         </div>
       </main>

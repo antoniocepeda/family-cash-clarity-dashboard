@@ -11,8 +11,50 @@ export function getDb(): Database.Database {
     _db.pragma("journal_mode = WAL");
     _db.pragma("foreign_keys = ON");
     initSchema(_db);
+    migrate(_db);
   }
   return _db;
+}
+
+function migrate(db: Database.Database) {
+  const columns = db
+    .prepare("PRAGMA table_info(events)")
+    .all() as { name: string }[];
+  const colNames = columns.map((c) => c.name);
+
+  if (!colNames.includes("actual_amount")) {
+    db.exec("ALTER TABLE events ADD COLUMN actual_amount REAL");
+  }
+  if (!colNames.includes("paid_date")) {
+    db.exec("ALTER TABLE events ADD COLUMN paid_date TEXT");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_history (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      actual_amount REAL NOT NULL,
+      paid_date TEXT NOT NULL,
+      due_date TEXT NOT NULL,
+      FOREIGN KEY (event_id) REFERENCES events(id)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ledger (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      description TEXT NOT NULL,
+      amount REAL NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('expense','income')),
+      account_id TEXT NOT NULL,
+      event_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (account_id) REFERENCES accounts(id),
+      FOREIGN KEY (event_id) REFERENCES events(id)
+    )
+  `);
 }
 
 function initSchema(db: Database.Database) {
@@ -31,6 +73,7 @@ function initSchema(db: Database.Database) {
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('income','bill')),
       amount REAL NOT NULL,
+      actual_amount REAL,
       due_date TEXT NOT NULL,
       recurrence_rule TEXT,
       priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('critical','normal','flexible')),
@@ -38,8 +81,32 @@ function initSchema(db: Database.Database) {
       account_id TEXT,
       active INTEGER NOT NULL DEFAULT 1,
       paid INTEGER NOT NULL DEFAULT 0,
+      paid_date TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (account_id) REFERENCES accounts(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS event_history (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      actual_amount REAL NOT NULL,
+      paid_date TEXT NOT NULL,
+      due_date TEXT NOT NULL,
+      FOREIGN KEY (event_id) REFERENCES events(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ledger (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      description TEXT NOT NULL,
+      amount REAL NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('expense','income')),
+      account_id TEXT NOT NULL,
+      event_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (account_id) REFERENCES accounts(id),
+      FOREIGN KEY (event_id) REFERENCES events(id)
     );
 
     CREATE TABLE IF NOT EXISTS alerts (

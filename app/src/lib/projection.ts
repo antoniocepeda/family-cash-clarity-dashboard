@@ -72,13 +72,15 @@ export function expandRecurrence(event: Event, startDate: Date, endDate: Date): 
   return dates;
 }
 
-export function generateProjection(days: number = 28): ProjectionDay[] {
+export function generateProjection(days: number = 28, simulateEarlyIds: string[] = []): ProjectionDay[] {
   const db = getDb();
   const accounts = db.prepare("SELECT * FROM accounts").all() as {
     current_balance: number;
     is_reserve: number;
   }[];
   const events = db.prepare("SELECT * FROM events WHERE active = 1").all() as Event[];
+
+  const simulateSet = new Set(simulateEarlyIds);
 
   const totalBalance = accounts
     .filter((a) => !a.is_reserve)
@@ -99,7 +101,15 @@ export function generateProjection(days: number = 28): ProjectionDay[] {
   for (const event of events) {
     if (event.paid && !event.recurrence_rule) continue;
 
-    const occurrences = expandRecurrence(event, today, endDate);
+    const isSimulated = simulateSet.has(event.id);
+
+    let occurrences: Date[];
+    if (isSimulated && !event.recurrence_rule) {
+      occurrences = [today];
+    } else {
+      occurrences = expandRecurrence(event, today, endDate);
+    }
+
     for (const occ of occurrences) {
       const key = format(occ, "yyyy-MM-dd");
       const day = dayMap.get(key);
@@ -107,13 +117,12 @@ export function generateProjection(days: number = 28): ProjectionDay[] {
 
       const impact = event.type === "income" ? event.amount : -event.amount;
       day.events.push({
-        name: event.name,
+        name: event.name + (isSimulated ? " (simulated)" : ""),
         amount: event.amount,
         type: event.type,
         priority: event.priority,
       });
 
-      // Apply to this day and all subsequent
       for (let j = dayMap.size - 1; j >= 0; j--) {
         const checkDate = format(addDays(today, j), "yyyy-MM-dd");
         const checkDay = dayMap.get(checkDate);
