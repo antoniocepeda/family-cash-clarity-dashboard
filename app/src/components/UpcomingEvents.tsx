@@ -180,7 +180,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                         )}
                         {isFunded && (
                           <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
-                            FUNDED
+                            PAID
                           </span>
                         )}
                       </div>
@@ -354,7 +354,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                               onClick={() => setConfirmingRow(row)}
                               className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
                             >
-                              Fund{remaining < planned - 0.005 ? ` $${remaining.toFixed(2)}` : ""}
+                              Pay
                             </button>
                           </>
                         )}
@@ -408,7 +408,7 @@ function ConfirmPaymentModal({
       <div className="absolute inset-0" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
         <h3 className="text-lg font-semibold text-slate-800 mb-1">
-          Fund {event.type === "income" ? "Income" : "Remaining"}
+          {event.type === "income" ? "Confirm Income" : "Pay Remaining"}
         </h3>
         <p className="text-sm text-slate-500 mb-5">{event.name}</p>
 
@@ -451,7 +451,7 @@ function ConfirmPaymentModal({
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
-              Amount to fund ($)
+              Amount to pay ($)
             </label>
             <input
               type="number"
@@ -483,7 +483,7 @@ function ConfirmPaymentModal({
             disabled={!isValid || parsedAmount > remaining + 0.005}
             className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {event.type === "income" ? "Confirm Received" : "Fund It"}
+            {event.type === "income" ? "Confirm Received" : "Pay It"}
           </button>
         </div>
       </div>

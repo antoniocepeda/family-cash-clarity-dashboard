@@ -25,7 +25,7 @@ export default function NextBills({ events }: Props) {
   const totalIncome = income.reduce((sum, e) => sum + e.amount, 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Next 7 Days</h2>
         <div className="flex items-center gap-4 text-sm">

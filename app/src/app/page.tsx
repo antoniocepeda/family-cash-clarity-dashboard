@@ -5,11 +5,8 @@ import CashPositionStrip from "@/components/CashPositionStrip";
 import RiskBanner from "@/components/RiskBanner";
 import NextBills from "@/components/NextBills";
 import ProjectionChart from "@/components/ProjectionChart";
-import UpcomingEvents from "@/components/UpcomingEvents";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
-import LedgerStatement from "@/components/LedgerStatement";
-import SpendingTrends from "@/components/SpendingTrends";
 import { Account, CashEventWithInstances, AllocationInput, ProjectionDay, Alert } from "@/lib/types";
 
 export default function Dashboard() {
@@ -19,26 +16,21 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [simulatedIds, setSimulatedIds] = useState<Set<string>>(new Set());
   const [projectionDays, setProjectionDays] = useState<28 | 60 | 90>(28);
 
-  const fetchProjection = useCallback(async (simIds: Set<string>, days?: number) => {
+  const fetchProjection = useCallback(async (days?: number) => {
     const params = new URLSearchParams();
     params.set("days", String(days ?? projectionDays));
-    if (simIds.size > 0) {
-      params.set("simulate_early", Array.from(simIds).join(","));
-    }
     const res = await fetch(`/api/projections?${params.toString()}`);
     return res.json();
   }, [projectionDays]);
 
-  const fetchAll = useCallback(async (simIds?: Set<string>) => {
-    const activeSimIds = simIds ?? simulatedIds;
+  const fetchAll = useCallback(async () => {
     try {
       const [acctRes, evtRes, proj, alertRes] = await Promise.all([
         fetch("/api/accounts"),
         fetch("/api/events"),
-        fetchProjection(activeSimIds),
+        fetchProjection(),
         fetch("/api/alerts"),
       ]);
       const [accts, evts, alts] = await Promise.all([
@@ -56,7 +48,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [simulatedIds, fetchProjection]);
+  }, [fetchProjection]);
 
   useEffect(() => {
     fetchAll();
@@ -64,56 +56,7 @@ export default function Dashboard() {
 
   const handleProjectionDaysChange = (days: 28 | 60 | 90) => {
     setProjectionDays(days);
-    fetchProjection(simulatedIds, days).then(setProjection);
-  };
-
-  const handleSimulateToggle = (id: string) => {
-    setSimulatedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      fetchProjection(next).then(setProjection);
-      return next;
-    });
-  };
-
-  const handleMarkPaid = async (id: string, actualAmount: number, instanceDueDate: string, note?: string) => {
-    await fetch("/api/events/mark-paid", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, actual_amount: actualAmount, instance_due_date: instanceDueDate, note }),
-    });
-    fetchAll();
-  };
-
-  const handleRollover = async (id: string, instanceDueDate: string) => {
-    await fetch("/api/events/rollover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, instance_due_date: instanceDueDate }),
-    });
-    fetchAll();
-  };
-
-  const handleEditInstanceAmount = async (eventId: string, dueDate: string, newAmount: number) => {
-    await fetch("/api/event-instances", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: eventId, due_date: dueDate, planned_amount: newAmount }),
-    });
-    fetchAll();
-  };
-
-  const handleLeftover = async (eventId: string, instanceDueDate: string, action: "rollover" | "release") => {
-    await fetch("/api/events/leftover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: eventId, instance_due_date: instanceDueDate, action }),
-    });
-    fetchAll();
+    fetchProjection(days).then(setProjection);
   };
 
   const handleAddEvent = async (data: {
@@ -194,11 +137,11 @@ export default function Dashboard() {
           <RiskBanner alerts={alerts.filter((a) => a.severity !== "info")} />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          <div className="lg:col-span-1 flex flex-col">
             <NextBills events={events} />
           </div>
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 flex flex-col">
             <ProjectionChart
               projection={projection}
               projectionDays={projectionDays}
@@ -206,20 +149,6 @@ export default function Dashboard() {
             />
           </div>
         </div>
-
-        <UpcomingEvents
-          events={events}
-          onMarkPaid={handleMarkPaid}
-          onRollover={handleRollover}
-          onEditInstanceAmount={handleEditInstanceAmount}
-          onLeftover={handleLeftover}
-          simulatedIds={simulatedIds}
-          onSimulateToggle={handleSimulateToggle}
-        />
-
-        <LedgerStatement accounts={accounts} />
-
-        <SpendingTrends />
 
         <div className="border-t border-slate-200 pt-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>

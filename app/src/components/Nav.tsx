@@ -8,6 +8,9 @@ export default function Nav() {
 
   const links = [
     { href: "/", label: "Dashboard" },
+    { href: "/events", label: "Upcoming Events" },
+    { href: "/transactions", label: "Transactions" },
+    { href: "/trends", label: "Spending Trends" },
     { href: "/manage", label: "Manage" },
   ];
 

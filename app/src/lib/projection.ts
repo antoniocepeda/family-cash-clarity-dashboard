@@ -184,7 +184,7 @@ export function generateAlerts(): {
       alerts.push({
         severity: "critical",
         message: `Projected balance goes negative ($${day.balance.toFixed(2)}) on ${day.date}`,
-        action_text: "Move funds from savings or defer a flexible bill",
+        action_text: "Move money from savings or defer a flexible bill",
       });
       break;
     }

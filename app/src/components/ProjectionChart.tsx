@@ -54,7 +54,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
     n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-slate-800">Cash Projection</h2>
@@ -82,7 +82,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
           </div>
         )}
       </div>
-      <ResponsiveContainer width="100%" height={280}>
+      <ResponsiveContainer width="100%" className="flex-1" height="100%" minHeight={280}>
         <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
           <defs>
             <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">

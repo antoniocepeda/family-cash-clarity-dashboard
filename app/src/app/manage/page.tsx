@@ -1036,7 +1036,7 @@ function HelpGuide() {
               color="violet"
               steps={[
                 "Confirm paycheck cleared — Sync the account with your bank",
-                "Review Next 7 Days — fund critical bills first",
+                "Review Next 7 Days — pay critical bills first",
                 "Check the projection chart with new income factored in",
                 "Decide your discretionary spending cap until next payday",
               ]}
