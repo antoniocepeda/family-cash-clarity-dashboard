@@ -55,6 +55,34 @@ function migrate(db: Database.Database) {
       FOREIGN KEY (event_id) REFERENCES events(id)
     )
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_instances (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      due_date TEXT NOT NULL,
+      planned_amount REAL NOT NULL,
+      allocated_amount REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','funded')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (event_id) REFERENCES events(id),
+      UNIQUE(event_id, due_date)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS event_allocations (
+      id TEXT PRIMARY KEY,
+      ledger_id TEXT NOT NULL,
+      instance_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (ledger_id) REFERENCES ledger(id),
+      FOREIGN KEY (instance_id) REFERENCES event_instances(id),
+      FOREIGN KEY (event_id) REFERENCES events(id)
+    )
+  `);
 }
 
 function initSchema(db: Database.Database) {

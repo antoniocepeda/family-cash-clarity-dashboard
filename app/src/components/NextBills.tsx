@@ -1,10 +1,10 @@
 "use client";
 
-import { CashEvent } from "@/lib/types";
+import { CashEventWithInstances } from "@/lib/types";
 import { format, parseISO, differenceInDays } from "date-fns";
 
 interface Props {
-  events: CashEvent[];
+  events: CashEventWithInstances[];
 }
 
 export default function NextBills({ events }: Props) {

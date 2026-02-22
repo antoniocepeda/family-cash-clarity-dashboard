@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { CashEvent } from "@/lib/types";
+import { CashEventWithInstances, EventInstance } from "@/lib/types";
 import {
   format, parseISO, differenceInDays, addDays, addWeeks, addMonths,
   isAfter, isBefore, isEqual, startOfDay,
 } from "date-fns";
 
 interface Props {
-  events: CashEvent[];
-  onMarkPaid: (id: string, actualAmount: number) => void;
+  events: CashEventWithInstances[];
+  onMarkPaid: (id: string, actualAmount: number, instanceDueDate: string) => void;
+  onRollover: (id: string, instanceDueDate: string) => void;
   simulatedIds: Set<string>;
   onSimulateToggle: (id: string) => void;
 }
@@ -21,18 +22,27 @@ const priorityBadge = {
 };
 
 interface OccurrenceRow {
-  event: CashEvent;
+  event: CashEventWithInstances;
   occurrenceDate: Date;
   isFirstOccurrence: boolean;
+  instance: EventInstance | null;
 }
 
-function expandEventOccurrences(event: CashEvent, windowStart: Date, windowEnd: Date): OccurrenceRow[] {
+function expandEventOccurrences(
+  event: CashEventWithInstances,
+  windowStart: Date,
+  windowEnd: Date
+): OccurrenceRow[] {
   const rows: OccurrenceRow[] = [];
   const baseDate = startOfDay(parseISO(event.due_date));
   const rule = event.recurrence_rule;
 
+  const findInstance = (dateStr: string) =>
+    event.instances?.find((i) => i.due_date === dateStr) || null;
+
   if (!rule) {
-    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true });
+    const inst = findInstance(event.due_date);
+    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
     return rows;
   }
 
@@ -45,7 +55,8 @@ function expandEventOccurrences(event: CashEvent, windowStart: Date, windowEnd: 
     : null;
 
   if (!advanceFn) {
-    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true });
+    const inst = findInstance(event.due_date);
+    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
     return rows;
   }
 
@@ -56,10 +67,13 @@ function expandEventOccurrences(event: CashEvent, windowStart: Date, windowEnd: 
 
   let isFirst = true;
   while (isBefore(cursor, windowEnd) || isEqual(cursor, windowEnd)) {
+    const dateStr = format(cursor, "yyyy-MM-dd");
+    const inst = findInstance(dateStr);
     rows.push({
       event,
       occurrenceDate: cursor,
       isFirstOccurrence: isFirst && isEqual(cursor, baseDate),
+      instance: inst,
     });
     isFirst = false;
     cursor = advanceFn(cursor);
@@ -68,8 +82,8 @@ function expandEventOccurrences(event: CashEvent, windowStart: Date, windowEnd: 
   return rows;
 }
 
-export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSimulateToggle }: Props) {
-  const [confirmingEvent, setConfirmingEvent] = useState<CashEvent | null>(null);
+export default function UpcomingEvents({ events, onMarkPaid, onRollover, simulatedIds, onSimulateToggle }: Props) {
+  const [confirmingRow, setConfirmingRow] = useState<OccurrenceRow | null>(null);
   const today = startOfDay(new Date());
   const projectionCutoff = addDays(today, 28);
 
@@ -108,22 +122,28 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {allRows.map((row, idx) => {
-                const { event, occurrenceDate } = row;
+              {allRows.map((row) => {
+                const { event, occurrenceDate, instance } = row;
                 const daysUntil = differenceInDays(occurrenceDate, today);
                 const isOverdue = daysUntil < 0;
                 const isDueSoon = daysUntil <= 2 && daysUntil >= 0;
 
+                const planned = instance?.planned_amount ?? event.amount;
+                const allocated = instance?.allocated_amount ?? 0;
+                const remaining = planned - allocated;
+                const isFunded = instance?.status === "funded" || remaining <= 0.005;
+                const progressPct = planned > 0 ? Math.min(100, (allocated / planned) * 100) : 0;
+
                 return (
                   <tr
                     key={`${event.id}-${format(occurrenceDate, "yyyy-MM-dd")}`}
-                    className="hover:bg-slate-50/50 transition-colors"
+                    className={`hover:bg-slate-50/50 transition-colors ${isFunded ? "opacity-60" : ""}`}
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full shrink-0 ${
-                            event.type === "income" ? "bg-emerald-500" : "bg-rose-400"
+                            event.type === "income" ? "bg-emerald-500" : isFunded ? "bg-emerald-400" : "bg-rose-400"
                           }`}
                         />
                         <span className="font-medium text-slate-800">{event.name}</span>
@@ -132,17 +152,41 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
                             AUTO
                           </span>
                         )}
+                        {isFunded && (
+                          <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+                            FUNDED
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      <span
-                        className={`font-semibold ${
-                          event.type === "income" ? "text-emerald-600" : "text-slate-800"
-                        }`}
-                      >
-                        {event.type === "income" ? "+" : "−"}$
-                        {event.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </span>
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span
+                            className={`font-semibold ${
+                              event.type === "income" ? "text-emerald-600" : "text-slate-800"
+                            }`}
+                          >
+                            {event.type === "income" ? "+" : "−"}$
+                            {remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </span>
+                          {allocated > 0.005 && (
+                            <span className="text-[10px] text-slate-400">
+                              / ${planned.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </div>
+                        {allocated > 0.005 && (
+                          <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                isFunded ? "bg-emerald-400" : "bg-amber-400"
+                              }`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1.5">
@@ -184,12 +228,33 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
                             {simulatedIds.has(event.id) ? "Simulating" : "What if?"}
                           </button>
                         )}
-                        <button
-                          onClick={() => setConfirmingEvent(event)}
-                          className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          Confirm
-                        </button>
+                        {isFunded ? (
+                          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                            <svg className="h-3.5 w-3.5 inline -mt-0.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Done
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                const dueDate = format(occurrenceDate, "yyyy-MM-dd");
+                                onRollover(event.id, dueDate);
+                              }}
+                              className="text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                              title="Skip remaining and move to next cycle"
+                            >
+                              Rollover
+                            </button>
+                            <button
+                              onClick={() => setConfirmingRow(row)}
+                              className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              Fund{remaining < planned - 0.005 ? ` $${remaining.toFixed(2)}` : ""}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -200,13 +265,14 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
         </div>
       </div>
 
-      {confirmingEvent && (
+      {confirmingRow && (
         <ConfirmPaymentModal
-          event={confirmingEvent}
-          onClose={() => setConfirmingEvent(null)}
+          row={confirmingRow}
+          onClose={() => setConfirmingRow(null)}
           onConfirm={(actualAmount) => {
-            onMarkPaid(confirmingEvent.id, actualAmount);
-            setConfirmingEvent(null);
+            const dueDate = format(confirmingRow.occurrenceDate, "yyyy-MM-dd");
+            onMarkPaid(confirmingRow.event.id, actualAmount, dueDate);
+            setConfirmingRow(null);
           }}
         />
       )}
@@ -215,55 +281,76 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
 }
 
 function ConfirmPaymentModal({
-  event,
+  row,
   onClose,
   onConfirm,
 }: {
-  event: CashEvent;
+  row: OccurrenceRow;
   onClose: () => void;
   onConfirm: (actualAmount: number) => void;
 }) {
-  const [actualAmount, setActualAmount] = useState(event.amount.toString());
+  const { event, instance } = row;
+  const planned = instance?.planned_amount ?? event.amount;
+  const allocated = instance?.allocated_amount ?? 0;
+  const remaining = planned - allocated;
+
+  const [actualAmount, setActualAmount] = useState(remaining.toFixed(2));
 
   const parsedAmount = parseFloat(actualAmount);
   const isValid = !isNaN(parsedAmount) && parsedAmount >= 0;
-  const diff = isValid ? parsedAmount - event.amount : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="absolute inset-0" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
         <h3 className="text-lg font-semibold text-slate-800 mb-1">
-          Confirm {event.type === "income" ? "Income" : "Payment"}
+          Fund {event.type === "income" ? "Income" : "Remaining"}
         </h3>
         <p className="text-sm text-slate-500 mb-5">{event.name}</p>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Estimated amount</span>
-            <span className="font-medium text-slate-700">
-              ${event.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </span>
+          <div className="rounded-lg bg-slate-50 p-3 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Planned</span>
+              <span className="font-medium text-slate-700">
+                ${planned.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            {allocated > 0.005 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Already allocated</span>
+                <span className="font-medium text-emerald-600">
+                  ${allocated.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs border-t border-slate-200 pt-1.5">
+              <span className="font-semibold text-slate-700">Remaining</span>
+              <span className="font-semibold text-slate-700">
+                ${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
-              Actual amount ($)
+              Amount to fund ($)
             </label>
             <input
               type="number"
               value={actualAmount}
               onChange={(e) => setActualAmount(e.target.value)}
               min="0"
+              max={remaining.toFixed(2)}
               step="0.01"
               autoFocus
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
             />
           </div>
 
-          {isValid && diff !== 0 && (
-            <p className={`text-xs font-medium ${diff > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-              {diff > 0 ? "+" : ""}${diff.toFixed(2)} vs estimate
+          {isValid && parsedAmount > remaining + 0.005 && (
+            <p className="text-xs font-medium text-red-600">
+              Exceeds remaining by ${(parsedAmount - remaining).toFixed(2)}
             </p>
           )}
         </div>
@@ -277,10 +364,10 @@ function ConfirmPaymentModal({
           </button>
           <button
             onClick={() => isValid && onConfirm(parsedAmount)}
-            disabled={!isValid}
+            disabled={!isValid || parsedAmount > remaining + 0.005}
             className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Confirm {event.type === "income" ? "Received" : "Paid"}
+            {event.type === "income" ? "Confirm Received" : "Fund It"}
           </button>
         </div>
       </div>

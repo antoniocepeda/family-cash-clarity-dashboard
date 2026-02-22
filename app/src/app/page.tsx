@@ -8,11 +8,11 @@ import ProjectionChart from "@/components/ProjectionChart";
 import UpcomingEvents from "@/components/UpcomingEvents";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
-import { Account, CashEvent, ProjectionDay, Alert } from "@/lib/types";
+import { Account, CashEventWithInstances, AllocationInput, ProjectionDay, Alert } from "@/lib/types";
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [events, setEvents] = useState<CashEvent[]>([]);
+  const [events, setEvents] = useState<CashEventWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,11 +71,20 @@ export default function Dashboard() {
     });
   };
 
-  const handleMarkPaid = async (id: string, actualAmount: number) => {
+  const handleMarkPaid = async (id: string, actualAmount: number, instanceDueDate: string) => {
     await fetch("/api/events/mark-paid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, actual_amount: actualAmount }),
+      body: JSON.stringify({ id, actual_amount: actualAmount, instance_due_date: instanceDueDate }),
+    });
+    fetchAll();
+  };
+
+  const handleRollover = async (id: string, instanceDueDate: string) => {
+    await fetch("/api/events/rollover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, instance_due_date: instanceDueDate }),
     });
     fetchAll();
   };
@@ -112,6 +121,7 @@ export default function Dashboard() {
     amount: number;
     type: string;
     account_id: string;
+    allocations: AllocationInput[];
   }) => {
     await fetch("/api/ledger", {
       method: "POST",
@@ -169,6 +179,7 @@ export default function Dashboard() {
         <UpcomingEvents
           events={events}
           onMarkPaid={handleMarkPaid}
+          onRollover={handleRollover}
           simulatedIds={simulatedIds}
           onSimulateToggle={handleSimulateToggle}
         />
@@ -187,7 +198,7 @@ export default function Dashboard() {
 
       <footer className="border-t border-slate-200 bg-white mt-8">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-slate-400">
-          <span>Family Cash Clarity Dashboard v1</span>
+          <span>Family Cash Clarity Dashboard v2</span>
           <span>
             {accounts.length} accounts · {events.filter((e) => e.active).length} active events
           </span>

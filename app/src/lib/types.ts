@@ -42,6 +42,39 @@ export interface LedgerEntry {
   account_id: string;
   event_id: string | null;
   created_at: string;
+  allocations?: EventAllocation[];
+}
+
+export interface EventInstance {
+  id: string;
+  event_id: string;
+  due_date: string;
+  planned_amount: number;
+  allocated_amount: number;
+  remaining_amount: number;
+  status: "open" | "funded";
+  created_at?: string;
+  event_name?: string;
+  event_type?: "income" | "bill";
+}
+
+export interface EventAllocation {
+  id: string;
+  ledger_id: string;
+  instance_id: string;
+  event_id: string;
+  amount: number;
+  created_at?: string;
+}
+
+export interface AllocationInput {
+  event_id: string;
+  instance_due_date: string;
+  amount: number;
+}
+
+export interface CashEventWithInstances extends CashEvent {
+  instances: EventInstance[];
 }
 
 export interface ProjectionDay {

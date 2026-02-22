@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Account } from "@/lib/types";
+import { useState, useEffect } from "react";
+import { Account, AllocationInput, EventInstance } from "@/lib/types";
 
 interface Props {
   accounts: Account[];
@@ -17,7 +17,13 @@ interface Props {
   }) => void;
   onReconcile: (id: string, balance: number) => void;
   onAddAccount: (data: { name: string; type: string; current_balance: number; is_reserve: boolean }) => void;
-  onLogTransaction: (data: { description: string; amount: number; type: string; account_id: string }) => void;
+  onLogTransaction: (data: {
+    description: string;
+    amount: number;
+    type: string;
+    account_id: string;
+    allocations: AllocationInput[];
+  }) => void;
 }
 
 type ModalType = "event" | "reconcile" | "account" | "transaction" | null;
@@ -116,7 +122,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
         className="absolute inset-0"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         {children}
       </div>
     </div>
@@ -433,6 +439,12 @@ function AccountModal({
   );
 }
 
+interface AllocRow {
+  key: number;
+  instanceKey: string;
+  amount: string;
+}
+
 function TransactionModal({
   accounts,
   onClose,
@@ -440,7 +452,13 @@ function TransactionModal({
 }: {
   accounts: Account[];
   onClose: () => void;
-  onSubmit: (data: { description: string; amount: number; type: string; account_id: string }) => void;
+  onSubmit: (data: {
+    description: string;
+    amount: number;
+    type: string;
+    account_id: string;
+    allocations: AllocationInput[];
+  }) => void;
 }) {
   const [form, setForm] = useState({
     description: "",
@@ -448,6 +466,62 @@ function TransactionModal({
     type: "expense",
     account_id: accounts[0]?.id || "",
   });
+
+  const [eligibleInstances, setEligibleInstances] = useState<EventInstance[]>([]);
+  const [allocRows, setAllocRows] = useState<AllocRow[]>([]);
+  const [nextKey, setNextKey] = useState(1);
+  const [loadingInstances, setLoadingInstances] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/event-instances")
+      .then((r) => r.json())
+      .then((data: EventInstance[]) => {
+        setEligibleInstances(data);
+        setLoadingInstances(false);
+      })
+      .catch(() => setLoadingInstances(false));
+  }, []);
+
+  const txAmount = parseFloat(form.amount) || 0;
+  const allocTotal = allocRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const unallocated = txAmount - allocTotal;
+  const isFullyAllocated = allocRows.length > 0 && Math.abs(unallocated) < 0.005;
+  const hasAllocations = allocRows.length > 0;
+
+  const allAllocsValid = allocRows.every((r) => {
+    const amt = parseFloat(r.amount) || 0;
+    if (amt <= 0 || !r.instanceKey) return false;
+    const inst = eligibleInstances.find((i) => `${i.event_id}|${i.due_date}` === r.instanceKey);
+    if (!inst) return false;
+    return amt <= inst.remaining_amount + 0.005;
+  });
+
+  const canSave =
+    form.description &&
+    txAmount > 0 &&
+    (!hasAllocations || (isFullyAllocated && allAllocsValid));
+
+  const addAllocRow = () => {
+    setAllocRows([...allocRows, { key: nextKey, instanceKey: "", amount: "" }]);
+    setNextKey(nextKey + 1);
+  };
+
+  const removeAllocRow = (key: number) => {
+    setAllocRows(allocRows.filter((r) => r.key !== key));
+  };
+
+  const updateAllocRow = (key: number, field: "instanceKey" | "amount", value: string) => {
+    setAllocRows(allocRows.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+  };
+
+  const buildAllocations = (): AllocationInput[] => {
+    return allocRows.map((r) => {
+      const [event_id, instance_due_date] = r.instanceKey.split("|");
+      return { event_id, instance_due_date, amount: parseFloat(r.amount) || 0 };
+    });
+  };
+
+  const usedInstanceKeys = new Set(allocRows.map((r) => r.instanceKey).filter(Boolean));
 
   return (
     <Overlay onClose={onClose}>
@@ -458,7 +532,7 @@ function TransactionModal({
           <input
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="e.g., Coffee, Gas, Lunch"
+            placeholder="e.g., Costco run, Gas, Lunch"
             autoFocus
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
           />
@@ -502,7 +576,103 @@ function TransactionModal({
             ))}
           </select>
         </div>
+
+        {/* Allocation Section */}
+        <div className="border-t border-slate-200 pt-3 mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              Allocate to Events
+            </label>
+            <button
+              type="button"
+              onClick={addAllocRow}
+              disabled={loadingInstances || eligibleInstances.length === 0}
+              className="text-xs font-medium text-amber-600 hover:text-amber-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+            >
+              + Add Split
+            </button>
+          </div>
+
+          {loadingInstances && (
+            <p className="text-xs text-slate-400 italic">Loading events...</p>
+          )}
+
+          {!loadingInstances && eligibleInstances.length === 0 && (
+            <p className="text-xs text-slate-400 italic">No upcoming events to allocate to.</p>
+          )}
+
+          {allocRows.map((row) => {
+            const selectedInst = eligibleInstances.find(
+              (i) => `${i.event_id}|${i.due_date}` === row.instanceKey
+            );
+            const rowAmt = parseFloat(row.amount) || 0;
+            const overRemaining = selectedInst && rowAmt > selectedInst.remaining_amount + 0.005;
+
+            return (
+              <div key={row.key} className="flex items-start gap-2 mb-2">
+                <select
+                  value={row.instanceKey}
+                  onChange={(e) => updateAllocRow(row.key, "instanceKey", e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                >
+                  <option value="">Select event...</option>
+                  {eligibleInstances.map((inst) => {
+                    const key = `${inst.event_id}|${inst.due_date}`;
+                    const isUsed = usedInstanceKeys.has(key) && key !== row.instanceKey;
+                    return (
+                      <option key={key} value={key} disabled={isUsed}>
+                        {inst.event_name} — {inst.due_date} (${inst.remaining_amount.toFixed(2)} left)
+                      </option>
+                    );
+                  })}
+                </select>
+                <input
+                  type="number"
+                  value={row.amount}
+                  onChange={(e) => updateAllocRow(row.key, "amount", e.target.value)}
+                  placeholder="$"
+                  min="0"
+                  step="0.01"
+                  className={`w-24 rounded-lg border px-2 py-1.5 text-xs focus:ring-2 outline-none ${
+                    overRemaining
+                      ? "border-red-400 focus:ring-red-400 focus:border-red-400"
+                      : "border-slate-300 focus:ring-amber-500 focus:border-amber-500"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeAllocRow(row.key)}
+                  className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                  title="Remove"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
+
+          {hasAllocations && txAmount > 0 && (
+            <div className="mt-2 space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Transaction total</span>
+                <span className="font-medium text-slate-700">${txAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Allocated</span>
+                <span className="font-medium text-slate-700">${allocTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className={`font-semibold ${Math.abs(unallocated) < 0.005 ? "text-emerald-600" : "text-amber-600"}`}>
+                  {Math.abs(unallocated) < 0.005 ? "Fully allocated" : `$${unallocated.toFixed(2)} left to allocate`}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
       <div className="flex justify-end gap-3 mt-5">
         <button
           onClick={onClose}
@@ -513,11 +683,14 @@ function TransactionModal({
         <button
           onClick={() =>
             onSubmit({
-              ...form,
-              amount: parseFloat(form.amount) || 0,
+              description: form.description,
+              amount: txAmount,
+              type: form.type,
+              account_id: form.account_id,
+              allocations: hasAllocations ? buildAllocations() : [],
             })
           }
-          disabled={!form.description || !form.amount}
+          disabled={!canSave}
           className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Log It

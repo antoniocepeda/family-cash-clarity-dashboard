@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getAllInstancesForEvents } from "@/lib/instances";
+import { CashEvent, EventInstance } from "@/lib/types";
+import { addDays, startOfDay } from "date-fns";
 import { v4 as uuid } from "uuid";
 
 export async function GET() {
   const db = getDb();
   const events = db
     .prepare("SELECT * FROM events WHERE active = 1 ORDER BY due_date ASC")
-    .all();
-  return NextResponse.json(events);
+    .all() as CashEvent[];
+
+  const windowEnd = addDays(startOfDay(new Date()), 28);
+  const allInstances = getAllInstancesForEvents(db, windowEnd);
+
+  const instanceMap = new Map<string, EventInstance[]>();
+  for (const inst of allInstances) {
+    const arr = instanceMap.get(inst.event_id) || [];
+    arr.push(inst);
+    instanceMap.set(inst.event_id, arr);
+  }
+
+  const enriched = events.map((e) => ({
+    ...e,
+    instances: instanceMap.get(e.id) || [],
+  }));
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(req: NextRequest) {
