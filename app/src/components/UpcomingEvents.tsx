@@ -109,16 +109,15 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
             </thead>
             <tbody className="divide-y divide-slate-100">
               {allRows.map((row, idx) => {
-                const { event, occurrenceDate, isFirstOccurrence } = row;
+                const { event, occurrenceDate } = row;
                 const daysUntil = differenceInDays(occurrenceDate, today);
                 const isOverdue = daysUntil < 0;
                 const isDueSoon = daysUntil <= 2 && daysUntil >= 0;
-                const isFutureOccurrence = !isFirstOccurrence;
 
                 return (
                   <tr
                     key={`${event.id}-${format(occurrenceDate, "yyyy-MM-dd")}`}
-                    className={`hover:bg-slate-50/50 transition-colors ${isFutureOccurrence ? "opacity-60" : ""}`}
+                    className="hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
@@ -185,16 +184,12 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
                             {simulatedIds.has(event.id) ? "Simulating" : "What if?"}
                           </button>
                         )}
-                        {isFirstOccurrence ? (
-                          <button
-                            onClick={() => setConfirmingEvent(event)}
-                            className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            Confirm
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">upcoming</span>
-                        )}
+                        <button
+                          onClick={() => setConfirmingEvent(event)}
+                          className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Confirm
+                        </button>
                       </div>
                     </td>
                   </tr>
