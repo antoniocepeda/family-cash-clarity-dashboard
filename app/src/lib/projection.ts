@@ -114,10 +114,21 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
     const isSimulated = simulateSet.has(event.id);
 
     let occurrences: Date[];
+    let overdueDateStr: string | null = null;
     if (isSimulated && !event.recurrence_rule) {
       occurrences = [today];
     } else {
       occurrences = expandRecurrence(event, today, endDate);
+      const baseDate = startOfDay(parseISO(event.due_date));
+      if (isBefore(baseDate, today)) {
+        const baseDateStr = format(baseDate, "yyyy-MM-dd");
+        const overdueKey = `${event.id}|${baseDateStr}`;
+        const inst = instanceMap.get(overdueKey);
+        if (!inst || inst.status !== "funded") {
+          occurrences = [today, ...occurrences];
+          overdueDateStr = baseDateStr;
+        }
+      }
     }
 
     for (const occ of occurrences) {
@@ -125,8 +136,9 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
       const day = dayMap.get(key);
       if (!day) continue;
 
-      const instanceKey = `${event.id}|${key}`;
-      const instance = instanceMap.get(instanceKey);
+      const isOverdueOcc = overdueDateStr && isEqual(occ, today);
+      const instanceLookup = isOverdueOcc ? `${event.id}|${overdueDateStr}` : `${event.id}|${key}`;
+      const instance = instanceMap.get(instanceLookup);
 
       let effectiveAmount = event.amount;
       if (instance) {

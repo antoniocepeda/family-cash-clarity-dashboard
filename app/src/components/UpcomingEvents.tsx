@@ -61,11 +61,25 @@ function expandEventOccurrences(
   }
 
   let cursor = baseDate;
-  while (isBefore(cursor, windowStart)) {
+
+  if (isBefore(baseDate, windowStart)) {
+    const dateStr = format(baseDate, "yyyy-MM-dd");
+    const inst = findInstance(dateStr);
+    if (!inst || inst.status !== "funded") {
+      rows.push({
+        event,
+        occurrenceDate: baseDate,
+        isFirstOccurrence: true,
+        instance: inst,
+      });
+    }
     cursor = advanceFn(cursor);
+    while (isBefore(cursor, windowStart)) {
+      cursor = advanceFn(cursor);
+    }
   }
 
-  let isFirst = true;
+  let isFirst = rows.length === 0;
   while (isBefore(cursor, windowEnd) || isEqual(cursor, windowEnd)) {
     const dateStr = format(cursor, "yyyy-MM-dd");
     const inst = findInstance(dateStr);

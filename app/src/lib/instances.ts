@@ -96,12 +96,17 @@ export function getOrExpandInstances(
 export function getEligibleInstances(db: Database.Database): EventInstance[] {
   const today = startOfDay(new Date());
   const windowEnd = addDays(today, 28);
+  const todayStr = format(today, "yyyy-MM-dd");
+  const windowEndStr = format(windowEnd, "yyyy-MM-dd");
 
   const events = db
     .prepare("SELECT * FROM events WHERE active = 1 AND paid = 0")
     .all() as EventRow[];
 
   for (const event of events) {
+    if (event.due_date < todayStr) {
+      ensureInstance(db, event.id, event.due_date, event.amount);
+    }
     const occurrences = expandRecurrence(event, today, windowEnd);
     for (const occ of occurrences) {
       const dateStr = format(occ, "yyyy-MM-dd");
@@ -116,11 +121,10 @@ export function getEligibleInstances(db: Database.Database): EventInstance[] {
        JOIN events e ON e.id = ei.event_id
        WHERE ei.status = 'open'
          AND e.active = 1
-         AND ei.due_date >= ?
          AND ei.due_date <= ?
        ORDER BY ei.due_date ASC`
     )
-    .all(format(today, "yyyy-MM-dd"), format(windowEnd, "yyyy-MM-dd")) as EventInstance[];
+    .all(windowEndStr) as EventInstance[];
 
   return rows.map((r) => ({
     ...r,
@@ -133,6 +137,8 @@ export function getAllInstancesForEvents(
   windowEnd: Date
 ): EventInstance[] {
   const today = startOfDay(new Date());
+  const todayStr = format(today, "yyyy-MM-dd");
+  const windowEndStr = format(windowEnd, "yyyy-MM-dd");
 
   const events = db
     .prepare("SELECT * FROM events WHERE active = 1")
@@ -140,6 +146,9 @@ export function getAllInstancesForEvents(
 
   for (const event of events) {
     if (event.paid && !event.recurrence_rule) continue;
+    if (event.due_date < todayStr) {
+      ensureInstance(db, event.id, event.due_date, event.amount);
+    }
     const occurrences = expandRecurrence(event, today, windowEnd);
     for (const occ of occurrences) {
       const dateStr = format(occ, "yyyy-MM-dd");
@@ -153,11 +162,10 @@ export function getAllInstancesForEvents(
        FROM event_instances ei
        JOIN events e ON e.id = ei.event_id
        WHERE e.active = 1
-         AND ei.due_date >= ?
          AND ei.due_date <= ?
        ORDER BY ei.due_date ASC`
     )
-    .all(format(today, "yyyy-MM-dd"), format(windowEnd, "yyyy-MM-dd")) as EventInstance[];
+    .all(windowEndStr) as EventInstance[];
 
   return rows.map((r) => ({
     ...r,
