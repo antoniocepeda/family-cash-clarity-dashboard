@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { CashEvent } from "@/lib/types";
-import { format, parseISO, differenceInDays, addDays, isAfter } from "date-fns";
+import {
+  format, parseISO, differenceInDays, addDays, addWeeks, addMonths,
+  isAfter, isBefore, isEqual, startOfDay,
+} from "date-fns";
 
 interface Props {
   events: CashEvent[];
@@ -17,15 +20,68 @@ const priorityBadge = {
   flexible: "bg-blue-100 text-blue-600",
 };
 
+interface OccurrenceRow {
+  event: CashEvent;
+  occurrenceDate: Date;
+  isFirstOccurrence: boolean;
+}
+
+function expandEventOccurrences(event: CashEvent, windowStart: Date, windowEnd: Date): OccurrenceRow[] {
+  const rows: OccurrenceRow[] = [];
+  const baseDate = startOfDay(parseISO(event.due_date));
+  const rule = event.recurrence_rule;
+
+  if (!rule) {
+    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true });
+    return rows;
+  }
+
+  const advanceFn =
+    rule === "weekly" ? (d: Date) => addDays(d, 7)
+    : rule === "biweekly" ? (d: Date) => addWeeks(d, 2)
+    : rule === "monthly" ? (d: Date) => addMonths(d, 1)
+    : rule === "quarterly" ? (d: Date) => addMonths(d, 3)
+    : rule === "annual" ? (d: Date) => addMonths(d, 12)
+    : null;
+
+  if (!advanceFn) {
+    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true });
+    return rows;
+  }
+
+  let cursor = baseDate;
+  while (isBefore(cursor, windowStart)) {
+    cursor = advanceFn(cursor);
+  }
+
+  let isFirst = true;
+  while (isBefore(cursor, windowEnd) || isEqual(cursor, windowEnd)) {
+    rows.push({
+      event,
+      occurrenceDate: cursor,
+      isFirstOccurrence: isFirst && isEqual(cursor, baseDate),
+    });
+    isFirst = false;
+    cursor = advanceFn(cursor);
+  }
+
+  return rows;
+}
+
 export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSimulateToggle }: Props) {
   const [confirmingEvent, setConfirmingEvent] = useState<CashEvent | null>(null);
-  const today = new Date();
+  const today = startOfDay(new Date());
   const projectionCutoff = addDays(today, 28);
-  const active = events
-    .filter((e) => e.active && !e.paid)
-    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
-  if (active.length === 0) {
+  const active = events.filter((e) => e.active && !e.paid);
+
+  const allRows: OccurrenceRow[] = [];
+  for (const event of active) {
+    allRows.push(...expandEventOccurrences(event, today, projectionCutoff));
+  }
+  allRows.sort((a, b) => a.occurrenceDate.getTime() - b.occurrenceDate.getTime());
+
+  if (allRows.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400">
         No upcoming events. Add income or bills to get started.
@@ -52,13 +108,18 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {active.map((event) => {
-                const daysUntil = differenceInDays(parseISO(event.due_date), today);
+              {allRows.map((row, idx) => {
+                const { event, occurrenceDate, isFirstOccurrence } = row;
+                const daysUntil = differenceInDays(occurrenceDate, today);
                 const isOverdue = daysUntil < 0;
                 const isDueSoon = daysUntil <= 2 && daysUntil >= 0;
+                const isFutureOccurrence = !isFirstOccurrence;
 
                 return (
-                  <tr key={event.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr
+                    key={`${event.id}-${format(occurrenceDate, "yyyy-MM-dd")}`}
+                    className={`hover:bg-slate-50/50 transition-colors ${isFutureOccurrence ? "opacity-60" : ""}`}
+                  >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span
@@ -87,7 +148,7 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1.5">
                         <span className={`${isOverdue ? "text-red-600 font-semibold" : isDueSoon ? "text-amber-600 font-medium" : "text-slate-600"}`}>
-                          {format(parseISO(event.due_date), "MMM d")}
+                          {format(occurrenceDate, "MMM d")}
                         </span>
                         {isOverdue && (
                           <span className="text-[10px] font-bold text-red-600">OVERDUE</span>
@@ -124,12 +185,16 @@ export default function UpcomingEvents({ events, onMarkPaid, simulatedIds, onSim
                             {simulatedIds.has(event.id) ? "Simulating" : "What if?"}
                           </button>
                         )}
-                        <button
-                          onClick={() => setConfirmingEvent(event)}
-                          className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          Confirm
-                        </button>
+                        {isFirstOccurrence ? (
+                          <button
+                            onClick={() => setConfirmingEvent(event)}
+                            className="text-xs font-medium text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            Confirm
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">upcoming</span>
+                        )}
                       </div>
                     </td>
                   </tr>
