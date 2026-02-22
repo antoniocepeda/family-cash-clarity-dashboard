@@ -64,6 +64,7 @@ export interface EventAllocation {
   instance_id: string;
   event_id: string;
   amount: number;
+  note?: string | null;
   created_at?: string;
 }
 
@@ -71,6 +72,7 @@ export interface AllocationInput {
   event_id: string;
   instance_due_date: string;
   amount: number;
+  note?: string;
 }
 
 export interface CashEventWithInstances extends CashEvent {

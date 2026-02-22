@@ -5,7 +5,7 @@ import { addDays, addWeeks, addMonths, format, parseISO } from "date-fns";
 import { randomUUID } from "crypto";
 
 export async function POST(req: NextRequest) {
-  const { id, actual_amount, instance_due_date } = await req.json();
+  const { id, actual_amount, instance_due_date, note } = await req.json();
   if (!id || actual_amount === undefined)
     return NextResponse.json(
       { error: "id and actual_amount required" },
@@ -45,9 +45,10 @@ export async function POST(req: NextRequest) {
     const ledgerId = randomUUID();
     if (event.account_id) {
       const ledgerType = event.type === "income" ? "income" : "expense";
+      const ledgerDesc = note ? `${event.name}: ${note}` : event.name;
       db.prepare(
         "INSERT INTO ledger (id, date, description, amount, type, account_id, event_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run(ledgerId, paidDate, event.name, actual_amount, ledgerType, event.account_id, event.id);
+      ).run(ledgerId, paidDate, ledgerDesc, actual_amount, ledgerType, event.account_id, event.id);
     }
 
     const instanceId = ensureInstance(db, event.id, targetDueDate, event.amount);
@@ -58,8 +59,8 @@ export async function POST(req: NextRequest) {
 
     if (event.account_id) {
       db.prepare(
-        "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount) VALUES (?, ?, ?, ?, ?)"
-      ).run(randomUUID(), ledgerId, instanceId, event.id, allocationAmount);
+        "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(randomUUID(), ledgerId, instanceId, event.id, allocationAmount, note || null);
     }
 
     const newAllocated = instance.allocated_amount + allocationAmount;

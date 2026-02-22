@@ -443,6 +443,7 @@ interface AllocRow {
   key: number;
   instanceKey: string;
   amount: string;
+  note: string;
 }
 
 function TransactionModal({
@@ -502,7 +503,7 @@ function TransactionModal({
     (!hasAllocations || (isFullyAllocated && allAllocsValid));
 
   const addAllocRow = () => {
-    setAllocRows([...allocRows, { key: nextKey, instanceKey: "", amount: "" }]);
+    setAllocRows([...allocRows, { key: nextKey, instanceKey: "", amount: "", note: "" }]);
     setNextKey(nextKey + 1);
   };
 
@@ -510,14 +511,14 @@ function TransactionModal({
     setAllocRows(allocRows.filter((r) => r.key !== key));
   };
 
-  const updateAllocRow = (key: number, field: "instanceKey" | "amount", value: string) => {
+  const updateAllocRow = (key: number, field: "instanceKey" | "amount" | "note", value: string) => {
     setAllocRows(allocRows.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
   };
 
   const buildAllocations = (): AllocationInput[] => {
     return allocRows.map((r) => {
       const [event_id, instance_due_date] = r.instanceKey.split("|");
-      return { event_id, instance_due_date, amount: parseFloat(r.amount) || 0 };
+      return { event_id, instance_due_date, amount: parseFloat(r.amount) || 0, note: r.note || undefined };
     });
   };
 
@@ -609,46 +610,54 @@ function TransactionModal({
             const overRemaining = selectedInst && rowAmt > selectedInst.remaining_amount + 0.005;
 
             return (
-              <div key={row.key} className="flex items-start gap-2 mb-2">
-                <select
-                  value={row.instanceKey}
-                  onChange={(e) => updateAllocRow(row.key, "instanceKey", e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
-                >
-                  <option value="">Select event...</option>
-                  {eligibleInstances.map((inst) => {
-                    const key = `${inst.event_id}|${inst.due_date}`;
-                    const isUsed = usedInstanceKeys.has(key) && key !== row.instanceKey;
-                    return (
-                      <option key={key} value={key} disabled={isUsed}>
-                        {inst.event_name} — {inst.due_date} (${inst.remaining_amount.toFixed(2)} left)
-                      </option>
-                    );
-                  })}
-                </select>
+              <div key={row.key} className="mb-3 rounded-lg border border-slate-200 p-2 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <select
+                    value={row.instanceKey}
+                    onChange={(e) => updateAllocRow(row.key, "instanceKey", e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  >
+                    <option value="">Select event...</option>
+                    {eligibleInstances.map((inst) => {
+                      const key = `${inst.event_id}|${inst.due_date}`;
+                      const isUsed = usedInstanceKeys.has(key) && key !== row.instanceKey;
+                      return (
+                        <option key={key} value={key} disabled={isUsed}>
+                          {inst.event_name} — {inst.due_date} (${inst.remaining_amount.toFixed(2)} left)
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <input
+                    type="number"
+                    value={row.amount}
+                    onChange={(e) => updateAllocRow(row.key, "amount", e.target.value)}
+                    placeholder="$"
+                    min="0"
+                    step="0.01"
+                    className={`w-24 rounded-lg border px-2 py-1.5 text-xs focus:ring-2 outline-none ${
+                      overRemaining
+                        ? "border-red-400 focus:ring-red-400 focus:border-red-400"
+                        : "border-slate-300 focus:ring-amber-500 focus:border-amber-500"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeAllocRow(row.key)}
+                    className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                    title="Remove"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
                 <input
-                  type="number"
-                  value={row.amount}
-                  onChange={(e) => updateAllocRow(row.key, "amount", e.target.value)}
-                  placeholder="$"
-                  min="0"
-                  step="0.01"
-                  className={`w-24 rounded-lg border px-2 py-1.5 text-xs focus:ring-2 outline-none ${
-                    overRemaining
-                      ? "border-red-400 focus:ring-red-400 focus:border-red-400"
-                      : "border-slate-300 focus:ring-amber-500 focus:border-amber-500"
-                  }`}
+                  value={row.note}
+                  onChange={(e) => updateAllocRow(row.key, "note", e.target.value)}
+                  placeholder="What was this for? (optional)"
+                  className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={() => removeAllocRow(row.key)}
-                  className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                  title="Remove"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
               </div>
             );
           })}

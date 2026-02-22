@@ -71,11 +71,11 @@ export default function Dashboard() {
     });
   };
 
-  const handleMarkPaid = async (id: string, actualAmount: number, instanceDueDate: string) => {
+  const handleMarkPaid = async (id: string, actualAmount: number, instanceDueDate: string, note?: string) => {
     await fetch("/api/events/mark-paid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, actual_amount: actualAmount, instance_due_date: instanceDueDate }),
+      body: JSON.stringify({ id, actual_amount: actualAmount, instance_due_date: instanceDueDate, note }),
     });
     fetchAll();
   };

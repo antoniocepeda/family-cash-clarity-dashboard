@@ -77,12 +77,18 @@ function migrate(db: Database.Database) {
       instance_id TEXT NOT NULL,
       event_id TEXT NOT NULL,
       amount REAL NOT NULL,
+      note TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (ledger_id) REFERENCES ledger(id),
       FOREIGN KEY (instance_id) REFERENCES event_instances(id),
       FOREIGN KEY (event_id) REFERENCES events(id)
     )
   `);
+
+  const allocCols = db.prepare("PRAGMA table_info(event_allocations)").all() as { name: string }[];
+  if (!allocCols.some((c) => c.name === "note")) {
+    db.exec("ALTER TABLE event_allocations ADD COLUMN note TEXT");
+  }
 }
 
 function initSchema(db: Database.Database) {

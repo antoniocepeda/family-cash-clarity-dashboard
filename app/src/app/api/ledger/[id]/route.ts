@@ -38,8 +38,8 @@ function applyAllocations(
     }
 
     db.prepare(
-      "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount) VALUES (?, ?, ?, ?, ?)"
-    ).run(randomUUID(), ledgerId, instanceId, alloc.event_id, alloc.amount);
+      "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(randomUUID(), ledgerId, instanceId, alloc.event_id, alloc.amount, alloc.note || null);
 
     const newAllocated = instance.allocated_amount + alloc.amount;
     const newStatus = newAllocated >= instance.planned_amount - 0.005 ? "funded" : "open";

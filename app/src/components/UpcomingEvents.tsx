@@ -9,7 +9,7 @@ import {
 
 interface Props {
   events: CashEventWithInstances[];
-  onMarkPaid: (id: string, actualAmount: number, instanceDueDate: string) => void;
+  onMarkPaid: (id: string, actualAmount: number, instanceDueDate: string, note?: string) => void;
   onRollover: (id: string, instanceDueDate: string) => void;
   simulatedIds: Set<string>;
   onSimulateToggle: (id: string) => void;
@@ -283,9 +283,9 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, simulat
         <ConfirmPaymentModal
           row={confirmingRow}
           onClose={() => setConfirmingRow(null)}
-          onConfirm={(actualAmount) => {
+          onConfirm={(actualAmount, note) => {
             const dueDate = format(confirmingRow.occurrenceDate, "yyyy-MM-dd");
-            onMarkPaid(confirmingRow.event.id, actualAmount, dueDate);
+            onMarkPaid(confirmingRow.event.id, actualAmount, dueDate, note);
             setConfirmingRow(null);
           }}
         />
@@ -301,7 +301,7 @@ function ConfirmPaymentModal({
 }: {
   row: OccurrenceRow;
   onClose: () => void;
-  onConfirm: (actualAmount: number) => void;
+  onConfirm: (actualAmount: number, note?: string) => void;
 }) {
   const { event, instance } = row;
   const planned = instance?.planned_amount ?? event.amount;
@@ -309,6 +309,7 @@ function ConfirmPaymentModal({
   const remaining = planned - allocated;
 
   const [actualAmount, setActualAmount] = useState(remaining.toFixed(2));
+  const [note, setNote] = useState("");
 
   const parsedAmount = parseFloat(actualAmount);
   const isValid = !isNaN(parsedAmount) && parsedAmount >= 0;
@@ -348,6 +349,19 @@ function ConfirmPaymentModal({
 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
+              What was this for?
+            </label>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g., Milk and bread at Trader Joe's"
+              autoFocus
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
               Amount to fund ($)
             </label>
             <input
@@ -357,7 +371,6 @@ function ConfirmPaymentModal({
               min="0"
               max={remaining.toFixed(2)}
               step="0.01"
-              autoFocus
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
             />
           </div>
@@ -377,7 +390,7 @@ function ConfirmPaymentModal({
             Cancel
           </button>
           <button
-            onClick={() => isValid && onConfirm(parsedAmount)}
+            onClick={() => isValid && onConfirm(parsedAmount, note || undefined)}
             disabled={!isValid || parsedAmount > remaining + 0.005}
             className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
