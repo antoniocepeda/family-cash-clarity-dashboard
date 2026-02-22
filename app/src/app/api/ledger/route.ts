@@ -13,11 +13,11 @@ export async function GET() {
 
   const allAllocations = db
     .prepare(
-      `SELECT ea.*, e.name as event_name
-       FROM event_allocations ea
-       JOIN events e ON e.id = ea.event_id`
+      `SELECT ca.*, c.name as commitment_name
+       FROM commitment_allocations ca
+       JOIN commitments c ON c.id = ca.commitment_id`
     )
-    .all() as { ledger_id: string; id: string; instance_id: string; event_id: string; amount: number; event_name: string }[];
+    .all() as { ledger_id: string; id: string; instance_id: string; commitment_id: string; amount: number; commitment_name: string }[];
 
   const allocsByLedger = new Map<string, typeof allAllocations>();
   for (const a of allAllocations) {
@@ -78,28 +78,28 @@ export async function POST(req: NextRequest) {
     ).run(impact, account_id);
 
     for (const alloc of allocs) {
-      const event = db.prepare("SELECT amount FROM events WHERE id = ?").get(alloc.event_id) as { amount: number } | undefined;
-      if (!event) throw new Error(`Event ${alloc.event_id} not found`);
+      const commitment = db.prepare("SELECT amount FROM commitments WHERE id = ?").get(alloc.commitment_id) as { amount: number } | undefined;
+      if (!commitment) throw new Error(`Commitment ${alloc.commitment_id} not found`);
 
-      const instanceId = ensureInstance(db, alloc.event_id, alloc.instance_due_date, event.amount);
+      const instanceId = ensureInstance(db, alloc.commitment_id, alloc.instance_due_date, commitment.amount);
 
-      const instance = db.prepare("SELECT planned_amount, allocated_amount FROM event_instances WHERE id = ?")
+      const instance = db.prepare("SELECT planned_amount, allocated_amount FROM commitment_instances WHERE id = ?")
         .get(instanceId) as { planned_amount: number; allocated_amount: number };
       const remaining = instance.planned_amount - instance.allocated_amount;
 
       if (alloc.amount > remaining + 0.005) {
-        throw new Error(`Allocation of $${alloc.amount.toFixed(2)} exceeds remaining $${remaining.toFixed(2)} for event`);
+        throw new Error(`Allocation of $${alloc.amount.toFixed(2)} exceeds remaining $${remaining.toFixed(2)} for commitment`);
       }
 
       db.prepare(
-        "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
-      ).run(randomUUID(), id, instanceId, alloc.event_id, alloc.amount, alloc.note || null);
+        "INSERT INTO commitment_allocations (id, ledger_id, instance_id, commitment_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(randomUUID(), id, instanceId, alloc.commitment_id, alloc.amount, alloc.note || null);
 
       const newAllocated = instance.allocated_amount + alloc.amount;
       const newStatus = newAllocated >= instance.planned_amount - 0.005 ? "funded" : "open";
 
       db.prepare(
-        "UPDATE event_instances SET allocated_amount = ?, status = ? WHERE id = ?"
+        "UPDATE commitment_instances SET allocated_amount = ?, status = ? WHERE id = ?"
       ).run(newAllocated, newStatus, instanceId);
     }
   });

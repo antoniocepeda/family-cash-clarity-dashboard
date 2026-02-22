@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CashEventWithInstances, EventInstance } from "@/lib/types";
+import { CommitmentWithInstances, CommitmentInstance } from "@/lib/types";
 import {
   format, parseISO, differenceInDays, addDays, addWeeks, addMonths,
   isAfter, isBefore, isEqual, startOfDay,
 } from "date-fns";
 
 interface Props {
-  events: CashEventWithInstances[];
+  commitments: CommitmentWithInstances[];
   onMarkPaid: (id: string, actualAmount: number, instanceDueDate: string, note?: string) => void;
   onRollover: (id: string, instanceDueDate: string) => void;
-  onEditInstanceAmount?: (eventId: string, dueDate: string, newAmount: number) => void;
-  onLeftover?: (eventId: string, instanceDueDate: string, action: "rollover" | "release") => void;
+  onEditInstanceAmount?: (commitmentId: string, dueDate: string, newAmount: number) => void;
+  onLeftover?: (commitmentId: string, instanceDueDate: string, action: "rollover" | "release") => void;
   simulatedIds: Set<string>;
   onSimulateToggle: (id: string) => void;
 }
@@ -24,27 +24,27 @@ const priorityBadge = {
 };
 
 interface OccurrenceRow {
-  event: CashEventWithInstances;
+  commitment: CommitmentWithInstances;
   occurrenceDate: Date;
   isFirstOccurrence: boolean;
-  instance: EventInstance | null;
+  instance: CommitmentInstance | null;
 }
 
-function expandEventOccurrences(
-  event: CashEventWithInstances,
+function expandCommitmentOccurrences(
+  commitment: CommitmentWithInstances,
   windowStart: Date,
   windowEnd: Date
 ): OccurrenceRow[] {
   const rows: OccurrenceRow[] = [];
-  const baseDate = startOfDay(parseISO(event.due_date));
-  const rule = event.recurrence_rule;
+  const baseDate = startOfDay(parseISO(commitment.due_date));
+  const rule = commitment.recurrence_rule;
 
   const findInstance = (dateStr: string) =>
-    event.instances?.find((i) => i.due_date === dateStr) || null;
+    commitment.instances?.find((i) => i.due_date === dateStr) || null;
 
   if (!rule) {
-    const inst = findInstance(event.due_date);
-    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
+    const inst = findInstance(commitment.due_date);
+    rows.push({ commitment, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
     return rows;
   }
 
@@ -57,8 +57,8 @@ function expandEventOccurrences(
     : null;
 
   if (!advanceFn) {
-    const inst = findInstance(event.due_date);
-    rows.push({ event, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
+    const inst = findInstance(commitment.due_date);
+    rows.push({ commitment, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
     return rows;
   }
 
@@ -69,7 +69,7 @@ function expandEventOccurrences(
     const inst = findInstance(dateStr);
     if (!inst || inst.status !== "funded") {
       rows.push({
-        event,
+        commitment,
         occurrenceDate: baseDate,
         isFirstOccurrence: true,
         instance: inst,
@@ -86,7 +86,7 @@ function expandEventOccurrences(
     const dateStr = format(cursor, "yyyy-MM-dd");
     const inst = findInstance(dateStr);
     rows.push({
-      event,
+      commitment,
       occurrenceDate: cursor,
       isFirstOccurrence: isFirst && isEqual(cursor, baseDate),
       instance: inst,
@@ -98,7 +98,7 @@ function expandEventOccurrences(
   return rows;
 }
 
-export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditInstanceAmount, onLeftover, simulatedIds, onSimulateToggle }: Props) {
+export default function UpcomingCommitments({ commitments, onMarkPaid, onRollover, onEditInstanceAmount, onLeftover, simulatedIds, onSimulateToggle }: Props) {
   const [confirmingRow, setConfirmingRow] = useState<OccurrenceRow | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -113,18 +113,18 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
     }
   }, [editingKey]);
 
-  const active = events.filter((e) => e.active && !e.paid);
+  const active = commitments.filter((c) => c.active && !c.paid);
 
   const allRows: OccurrenceRow[] = [];
-  for (const event of active) {
-    allRows.push(...expandEventOccurrences(event, today, projectionCutoff));
+  for (const commitment of active) {
+    allRows.push(...expandCommitmentOccurrences(commitment, today, projectionCutoff));
   }
   allRows.sort((a, b) => a.occurrenceDate.getTime() - b.occurrenceDate.getTime());
 
   if (allRows.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400">
-        No upcoming events. Add income or bills to get started.
+        No commitments. Add income or bills to get started.
       </div>
     );
   }
@@ -133,13 +133,13 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
     <>
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="p-5 pb-3">
-          <h2 className="text-lg font-semibold text-slate-800">Upcoming Events</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Commitments</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-y border-slate-100 bg-slate-50/50">
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Event</th>
+                <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Commitment</th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Due</th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Recurrence</th>
@@ -149,12 +149,12 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
             </thead>
             <tbody className="divide-y divide-slate-100">
               {allRows.map((row) => {
-                const { event, occurrenceDate, instance } = row;
+                const { commitment, occurrenceDate, instance } = row;
                 const daysUntil = differenceInDays(occurrenceDate, today);
                 const isOverdue = daysUntil < 0;
                 const isDueSoon = daysUntil <= 2 && daysUntil >= 0;
 
-                const planned = instance?.planned_amount ?? event.amount;
+                const planned = instance?.planned_amount ?? commitment.amount;
                 const allocated = instance?.allocated_amount ?? 0;
                 const remaining = planned - allocated;
                 const isFunded = instance?.status === "funded" || remaining <= 0.005;
@@ -162,18 +162,18 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
 
                 return (
                   <tr
-                    key={`${event.id}-${format(occurrenceDate, "yyyy-MM-dd")}`}
+                    key={`${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`}
                     className={`hover:bg-slate-50/50 transition-colors ${isFunded ? "opacity-60" : ""}`}
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full shrink-0 ${
-                            event.type === "income" ? "bg-emerald-500" : isFunded ? "bg-emerald-400" : "bg-rose-400"
+                            commitment.type === "income" ? "bg-emerald-500" : isFunded ? "bg-emerald-400" : "bg-rose-400"
                           }`}
                         />
-                        <span className="font-medium text-slate-800">{event.name}</span>
-                        {event.autopay === 1 && (
+                        <span className="font-medium text-slate-800">{commitment.name}</span>
+                        {commitment.autopay === 1 && (
                           <span className="text-[10px] font-medium bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">
                             AUTO
                           </span>
@@ -187,7 +187,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                     </td>
                     <td className="px-5 py-3">
                       {(() => {
-                        const rowKey = `${event.id}-${format(occurrenceDate, "yyyy-MM-dd")}`;
+                        const rowKey = `${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`;
                         const isEditing = editingKey === rowKey;
 
                         const handleStartEdit = () => {
@@ -199,7 +199,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                         const handleSaveEdit = () => {
                           const newAmount = parseFloat(editValue);
                           if (!isNaN(newAmount) && newAmount >= 0 && onEditInstanceAmount) {
-                            onEditInstanceAmount(event.id, format(occurrenceDate, "yyyy-MM-dd"), newAmount);
+                            onEditInstanceAmount(commitment.id, format(occurrenceDate, "yyyy-MM-dd"), newAmount);
                           }
                           setEditingKey(null);
                         };
@@ -237,10 +237,10 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                             <div className="flex items-baseline gap-1">
                               <span
                                 className={`font-semibold ${
-                                  event.type === "income" ? "text-emerald-600" : "text-slate-800"
+                                  commitment.type === "income" ? "text-emerald-600" : "text-slate-800"
                                 }`}
                               >
-                                {event.type === "income" ? "+" : "−"}$
+                                {commitment.type === "income" ? "+" : "−"}$
                                 {remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </span>
                               {allocated > 0.005 && (
@@ -282,30 +282,30 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                       </div>
                     </td>
                     <td className="px-5 py-3 text-slate-500 capitalize">
-                      {event.recurrence_rule || "One-time"}
+                      {commitment.recurrence_rule || "One-time"}
                     </td>
                     <td className="px-5 py-3">
                       <span
                         className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                          priorityBadge[event.priority]
+                          priorityBadge[commitment.priority]
                         }`}
                       >
-                        {event.priority}
+                        {commitment.priority}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {!event.recurrence_rule && isAfter(parseISO(event.due_date), projectionCutoff) && (
+                        {!commitment.recurrence_rule && isAfter(parseISO(commitment.due_date), projectionCutoff) && (
                           <button
-                            onClick={() => onSimulateToggle(event.id)}
+                            onClick={() => onSimulateToggle(commitment.id)}
                             className={`text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-                              simulatedIds.has(event.id)
+                              simulatedIds.has(commitment.id)
                                 ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
                                 : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
                             }`}
                             title="Simulate paying this early in the 28-day projection"
                           >
-                            {simulatedIds.has(event.id) ? "Simulating" : "What if?"}
+                            {simulatedIds.has(commitment.id) ? "Simulating" : "What if?"}
                           </button>
                         )}
                         {isFunded ? (
@@ -315,12 +315,12 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                             </svg>
                             Done
                           </span>
-                        ) : isOverdue && event.recurrence_rule && remaining > 0.005 && onLeftover ? (
+                        ) : isOverdue && commitment.recurrence_rule && remaining > 0.005 && onLeftover ? (
                           <>
                             <button
                               onClick={() => {
                                 const dueDate = format(occurrenceDate, "yyyy-MM-dd");
-                                onLeftover(event.id, dueDate, "rollover");
+                                onLeftover(commitment.id, dueDate, "rollover");
                               }}
                               className="text-xs font-medium text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-lg transition-colors"
                               title="Carry leftover into next period's envelope"
@@ -330,7 +330,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                             <button
                               onClick={() => {
                                 const dueDate = format(occurrenceDate, "yyyy-MM-dd");
-                                onLeftover(event.id, dueDate, "release");
+                                onLeftover(commitment.id, dueDate, "release");
                               }}
                               className="text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
                               title="Release unspent amount back to cash on hand"
@@ -343,7 +343,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
                             <button
                               onClick={() => {
                                 const dueDate = format(occurrenceDate, "yyyy-MM-dd");
-                                onRollover(event.id, dueDate);
+                                onRollover(commitment.id, dueDate);
                               }}
                               className="text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
                               title="Skip remaining and move to next cycle"
@@ -374,7 +374,7 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditI
           onClose={() => setConfirmingRow(null)}
           onConfirm={(actualAmount, note) => {
             const dueDate = format(confirmingRow.occurrenceDate, "yyyy-MM-dd");
-            onMarkPaid(confirmingRow.event.id, actualAmount, dueDate, note);
+            onMarkPaid(confirmingRow.commitment.id, actualAmount, dueDate, note);
             setConfirmingRow(null);
           }}
         />
@@ -392,8 +392,8 @@ function ConfirmPaymentModal({
   onClose: () => void;
   onConfirm: (actualAmount: number, note?: string) => void;
 }) {
-  const { event, instance } = row;
-  const planned = instance?.planned_amount ?? event.amount;
+  const { commitment, instance } = row;
+  const planned = instance?.planned_amount ?? commitment.amount;
   const allocated = instance?.allocated_amount ?? 0;
   const remaining = planned - allocated;
 
@@ -408,9 +408,9 @@ function ConfirmPaymentModal({
       <div className="absolute inset-0" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200">
         <h3 className="text-lg font-semibold text-slate-800 mb-1">
-          {event.type === "income" ? "Confirm Income" : "Pay Remaining"}
+          {commitment.type === "income" ? "Confirm Income" : "Pay Remaining"}
         </h3>
-        <p className="text-sm text-slate-500 mb-5">{event.name}</p>
+        <p className="text-sm text-slate-500 mb-5">{commitment.name}</p>
 
         <div className="space-y-4">
           <div className="rounded-lg bg-slate-50 p-3 space-y-1.5">
@@ -483,7 +483,7 @@ function ConfirmPaymentModal({
             disabled={!isValid || parsedAmount > remaining + 0.005}
             className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {event.type === "income" ? "Confirm Received" : "Pay It"}
+            {commitment.type === "income" ? "Confirm Received" : "Pay It"}
           </button>
         </div>
       </div>

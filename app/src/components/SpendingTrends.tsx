@@ -18,10 +18,10 @@ interface TrendPeriod {
   actual: number;
 }
 
-interface EventTrend {
-  event_id: string;
-  event_name: string;
-  event_type: string;
+interface CommitmentTrend {
+  commitment_id: string;
+  commitment_name: string;
+  commitment_type: string;
   recurrence_rule: string | null;
   periods: TrendPeriod[];
   avg_planned: number;
@@ -34,16 +34,16 @@ type PeriodType = "weeks" | "months";
 type RangeType = "4" | "8" | "12";
 
 export default function SpendingTrends() {
-  const [trends, setTrends] = useState<EventTrend[]>([]);
+  const [trends, setTrends] = useState<CommitmentTrend[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedEventId, setSelectedEventId] = useState<string>("all");
+  const [selectedCommitmentId, setSelectedCommitmentId] = useState<string>("all");
   const [period, setPeriod] = useState<PeriodType>("weeks");
   const [range, setRange] = useState<RangeType>("8");
 
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ period, range });
-    if (selectedEventId !== "all") params.set("event_id", selectedEventId);
+    if (selectedCommitmentId !== "all") params.set("commitment_id", selectedCommitmentId);
 
     fetch(`/api/trends?${params.toString()}`)
       .then((r) => r.json())
@@ -52,12 +52,12 @@ export default function SpendingTrends() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [selectedEventId, period, range]);
+  }, [selectedCommitmentId, period, range]);
 
   const selectedTrend = useMemo(() => {
-    if (selectedEventId === "all") return null;
-    return trends.find((t) => t.event_id === selectedEventId) || null;
-  }, [trends, selectedEventId]);
+    if (selectedCommitmentId === "all") return null;
+    return trends.find((t) => t.commitment_id === selectedCommitmentId) || null;
+  }, [trends, selectedCommitmentId]);
 
   const chartData = useMemo(() => {
     if (selectedTrend) {
@@ -92,7 +92,6 @@ export default function SpendingTrends() {
         totalUnder: selectedTrend.total_under,
       };
     }
-    const count = trends.length || 1;
     return {
       avgPlanned: trends.reduce((s, t) => s + t.avg_planned, 0),
       avgActual: trends.reduce((s, t) => s + t.avg_actual, 0),
@@ -119,14 +118,14 @@ export default function SpendingTrends() {
           <h2 className="text-lg font-semibold text-slate-800">Spending Trends</h2>
           <div className="flex items-center gap-2 flex-wrap">
             <select
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
+              value={selectedCommitmentId}
+              onChange={(e) => setSelectedCommitmentId(e.target.value)}
               className="text-xs rounded-lg border border-slate-300 px-2.5 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none"
             >
               <option value="all">All Envelopes</option>
               {trends.map((t) => (
-                <option key={t.event_id} value={t.event_id}>
-                  {t.event_name}
+                <option key={t.commitment_id} value={t.commitment_id}>
+                  {t.commitment_name}
                 </option>
               ))}
             </select>

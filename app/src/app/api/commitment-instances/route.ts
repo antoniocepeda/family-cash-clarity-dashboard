@@ -9,10 +9,10 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { event_id, due_date, planned_amount } = await req.json();
-  if (!event_id || !due_date || planned_amount === undefined) {
+  const { commitment_id, due_date, planned_amount } = await req.json();
+  if (!commitment_id || !due_date || planned_amount === undefined) {
     return NextResponse.json(
-      { error: "event_id, due_date, and planned_amount required" },
+      { error: "commitment_id, due_date, and planned_amount required" },
       { status: 400 }
     );
   }
@@ -24,21 +24,21 @@ export async function PATCH(req: NextRequest) {
   }
 
   const db = getDb();
-  const event = db.prepare("SELECT amount FROM events WHERE id = ?").get(event_id) as { amount: number } | undefined;
-  if (!event) {
-    return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  const commitment = db.prepare("SELECT amount FROM commitments WHERE id = ?").get(commitment_id) as { amount: number } | undefined;
+  if (!commitment) {
+    return NextResponse.json({ error: "Commitment not found" }, { status: 404 });
   }
 
-  const instanceId = ensureInstance(db, event_id, due_date, event.amount);
+  const instanceId = ensureInstance(db, commitment_id, due_date, commitment.amount);
 
   const instance = db
-    .prepare("SELECT allocated_amount FROM event_instances WHERE id = ?")
+    .prepare("SELECT allocated_amount FROM commitment_instances WHERE id = ?")
     .get(instanceId) as { allocated_amount: number };
 
   const newStatus = instance.allocated_amount >= planned_amount - 0.005 ? "funded" : "open";
 
   db.prepare(
-    "UPDATE event_instances SET planned_amount = ?, status = ? WHERE id = ?"
+    "UPDATE commitment_instances SET planned_amount = ?, status = ? WHERE id = ?"
   ).run(planned_amount, newStatus, instanceId);
 
   return NextResponse.json({ success: true });

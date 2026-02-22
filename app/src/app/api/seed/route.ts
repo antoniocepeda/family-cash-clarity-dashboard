@@ -20,11 +20,11 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const now = new Date().toISOString();
 
-  db.prepare("DELETE FROM event_allocations").run();
-  db.prepare("DELETE FROM event_instances").run();
+  db.prepare("DELETE FROM commitment_allocations").run();
+  db.prepare("DELETE FROM commitment_instances").run();
   db.prepare("DELETE FROM ledger").run();
-  db.prepare("DELETE FROM event_history").run();
-  db.prepare("DELETE FROM events").run();
+  db.prepare("DELETE FROM commitment_history").run();
+  db.prepare("DELETE FROM commitments").run();
   db.prepare("DELETE FROM accounts").run();
   db.prepare("DELETE FROM alerts").run();
 
@@ -63,14 +63,14 @@ export async function POST(req: NextRequest) {
 
   for (const bill of bills) {
     db.prepare(
-      `INSERT INTO events (id, name, type, amount, due_date, recurrence_rule, priority, autopay, account_id, active, paid)
+      `INSERT INTO commitments (id, name, type, amount, due_date, recurrence_rule, priority, autopay, account_id, active, paid)
        VALUES (?,?,?,?,?,?,?,?,?,1,0)`
     ).run(uuid(), bill.name, "bill", bill.amount, bill.due, bill.recurrence, bill.priority, bill.autopay ? 1 : 0, checkingId);
   }
 
   for (const inc of income) {
     db.prepare(
-      `INSERT INTO events (id, name, type, amount, due_date, recurrence_rule, priority, autopay, account_id, active, paid)
+      `INSERT INTO commitments (id, name, type, amount, due_date, recurrence_rule, priority, autopay, account_id, active, paid)
        VALUES (?,?,?,?,?,?,?,?,?,1,0)`
     ).run(uuid(), inc.name, "income", inc.amount, inc.due, inc.recurrence, inc.priority, 0, checkingId);
   }

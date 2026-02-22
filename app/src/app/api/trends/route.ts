@@ -10,10 +10,10 @@ interface TrendPeriod {
   actual: number;
 }
 
-interface EventTrend {
-  event_id: string;
-  event_name: string;
-  event_type: string;
+interface CommitmentTrend {
+  commitment_id: string;
+  commitment_name: string;
+  commitment_type: string;
   recurrence_rule: string | null;
   periods: TrendPeriod[];
   avg_planned: number;
@@ -24,7 +24,7 @@ interface EventTrend {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const eventId = searchParams.get("event_id");
+  const commitmentId = searchParams.get("commitment_id") || searchParams.get("event_id");
   const period = searchParams.get("period") || "weeks";
   const rangeStr = searchParams.get("range") || "8";
   const range = parseInt(rangeStr, 10);
@@ -32,19 +32,19 @@ export async function GET(req: NextRequest) {
   const db = getDb();
   const today = new Date();
 
-  let events: { id: string; name: string; type: string; recurrence_rule: string | null }[];
-  if (eventId) {
-    const row = db.prepare("SELECT id, name, type, recurrence_rule FROM events WHERE id = ?").get(eventId) as typeof events[0] | undefined;
-    events = row ? [row] : [];
+  let commitments: { id: string; name: string; type: string; recurrence_rule: string | null }[];
+  if (commitmentId) {
+    const row = db.prepare("SELECT id, name, type, recurrence_rule FROM commitments WHERE id = ?").get(commitmentId) as typeof commitments[0] | undefined;
+    commitments = row ? [row] : [];
   } else {
-    events = db.prepare(
-      "SELECT id, name, type, recurrence_rule FROM events WHERE active = 1 AND recurrence_rule IS NOT NULL"
-    ).all() as typeof events;
+    commitments = db.prepare(
+      "SELECT id, name, type, recurrence_rule FROM commitments WHERE active = 1 AND recurrence_rule IS NOT NULL"
+    ).all() as typeof commitments;
   }
 
-  const trends: EventTrend[] = [];
+  const trends: CommitmentTrend[] = [];
 
-  for (const event of events) {
+  for (const commitment of commitments) {
     const periods: TrendPeriod[] = [];
 
     for (let i = range - 1; i >= 0; i--) {
@@ -69,9 +69,9 @@ export async function GET(req: NextRequest) {
 
       const instanceRows = db.prepare(
         `SELECT planned_amount, allocated_amount
-         FROM event_instances
-         WHERE event_id = ? AND due_date >= ? AND due_date <= ?`
-      ).all(event.id, startStr, endStr) as { planned_amount: number; allocated_amount: number }[];
+         FROM commitment_instances
+         WHERE commitment_id = ? AND due_date >= ? AND due_date <= ?`
+      ).all(commitment.id, startStr, endStr) as { planned_amount: number; allocated_amount: number }[];
 
       let planned = 0;
       let actual = 0;
@@ -91,10 +91,10 @@ export async function GET(req: NextRequest) {
     const totalUnder = nonEmpty.filter((p) => p.actual < p.planned).reduce((s, p) => s + (p.planned - p.actual), 0);
 
     trends.push({
-      event_id: event.id,
-      event_name: event.name,
-      event_type: event.type,
-      recurrence_rule: event.recurrence_rule,
+      commitment_id: commitment.id,
+      commitment_name: commitment.name,
+      commitment_type: commitment.type,
+      recurrence_rule: commitment.recurrence_rule,
       periods,
       avg_planned: avgPlanned,
       avg_actual: avgActual,

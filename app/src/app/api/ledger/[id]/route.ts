@@ -6,16 +6,16 @@ import { randomUUID } from "crypto";
 
 function reverseAllocations(db: ReturnType<typeof getDb>, ledgerId: string) {
   const existing = db
-    .prepare("SELECT instance_id, amount FROM event_allocations WHERE ledger_id = ?")
+    .prepare("SELECT instance_id, amount FROM commitment_allocations WHERE ledger_id = ?")
     .all(ledgerId) as { instance_id: string; amount: number }[];
 
   for (const alloc of existing) {
     db.prepare(
-      "UPDATE event_instances SET allocated_amount = MAX(0, allocated_amount - ?), status = 'open' WHERE id = ?"
+      "UPDATE commitment_instances SET allocated_amount = MAX(0, allocated_amount - ?), status = 'open' WHERE id = ?"
     ).run(alloc.amount, alloc.instance_id);
   }
 
-  db.prepare("DELETE FROM event_allocations WHERE ledger_id = ?").run(ledgerId);
+  db.prepare("DELETE FROM commitment_allocations WHERE ledger_id = ?").run(ledgerId);
 }
 
 function applyAllocations(
@@ -24,12 +24,12 @@ function applyAllocations(
   allocs: AllocationInput[]
 ) {
   for (const alloc of allocs) {
-    const event = db.prepare("SELECT amount FROM events WHERE id = ?").get(alloc.event_id) as { amount: number } | undefined;
-    if (!event) throw new Error(`Event ${alloc.event_id} not found`);
+    const commitment = db.prepare("SELECT amount FROM commitments WHERE id = ?").get(alloc.commitment_id) as { amount: number } | undefined;
+    if (!commitment) throw new Error(`Commitment ${alloc.commitment_id} not found`);
 
-    const instanceId = ensureInstance(db, alloc.event_id, alloc.instance_due_date, event.amount);
+    const instanceId = ensureInstance(db, alloc.commitment_id, alloc.instance_due_date, commitment.amount);
 
-    const instance = db.prepare("SELECT planned_amount, allocated_amount FROM event_instances WHERE id = ?")
+    const instance = db.prepare("SELECT planned_amount, allocated_amount FROM commitment_instances WHERE id = ?")
       .get(instanceId) as { planned_amount: number; allocated_amount: number };
     const remaining = instance.planned_amount - instance.allocated_amount;
 
@@ -38,14 +38,14 @@ function applyAllocations(
     }
 
     db.prepare(
-      "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(randomUUID(), ledgerId, instanceId, alloc.event_id, alloc.amount, alloc.note || null);
+      "INSERT INTO commitment_allocations (id, ledger_id, instance_id, commitment_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(randomUUID(), ledgerId, instanceId, alloc.commitment_id, alloc.amount, alloc.note || null);
 
     const newAllocated = instance.allocated_amount + alloc.amount;
     const newStatus = newAllocated >= instance.planned_amount - 0.005 ? "funded" : "open";
 
     db.prepare(
-      "UPDATE event_instances SET allocated_amount = ?, status = ? WHERE id = ?"
+      "UPDATE commitment_instances SET allocated_amount = ?, status = ? WHERE id = ?"
     ).run(newAllocated, newStatus, instanceId);
   }
 }

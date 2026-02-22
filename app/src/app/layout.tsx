@@ -25,9 +25,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col bg-slate-50`}
       >
-        {children}
+        <div className="flex-1 flex flex-col">
+          {children}
+        </div>
+        <footer className="border-t border-slate-200 bg-white mt-auto">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-slate-400">
+            <span>Family Cash Clarity Dashboard v2</span>
+          </div>
+        </footer>
       </body>
     </html>
   );

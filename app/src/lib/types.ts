@@ -7,7 +7,7 @@ export interface Account {
   updated_at: string;
 }
 
-export interface CashEvent {
+export interface Commitment {
   id: string;
   name: string;
   type: "income" | "bill";
@@ -24,9 +24,9 @@ export interface CashEvent {
   created_at: string;
 }
 
-export interface EventHistory {
+export interface CommitmentHistory {
   id: string;
-  event_id: string;
+  commitment_id: string;
   amount: number;
   actual_amount: number;
   paid_date: string;
@@ -40,49 +40,49 @@ export interface LedgerEntry {
   amount: number;
   type: "expense" | "income";
   account_id: string;
-  event_id: string | null;
+  commitment_id: string | null;
   created_at: string;
-  allocations?: EventAllocation[];
+  allocations?: CommitmentAllocation[];
 }
 
-export interface EventInstance {
+export interface CommitmentInstance {
   id: string;
-  event_id: string;
+  commitment_id: string;
   due_date: string;
   planned_amount: number;
   allocated_amount: number;
   remaining_amount: number;
   status: "open" | "funded";
   created_at?: string;
-  event_name?: string;
-  event_type?: "income" | "bill";
+  commitment_name?: string;
+  commitment_type?: "income" | "bill";
 }
 
-export interface EventAllocation {
+export interface CommitmentAllocation {
   id: string;
   ledger_id: string;
   instance_id: string;
-  event_id: string;
+  commitment_id: string;
   amount: number;
   note?: string | null;
   created_at?: string;
 }
 
 export interface AllocationInput {
-  event_id: string;
+  commitment_id: string;
   instance_due_date: string;
   amount: number;
   note?: string;
 }
 
-export interface CashEventWithInstances extends CashEvent {
-  instances: EventInstance[];
+export interface CommitmentWithInstances extends Commitment {
+  instances: CommitmentInstance[];
 }
 
 export interface ProjectionDay {
   date: string;
   balance: number;
-  events: { name: string; amount: number; type: string; priority: string }[];
+  commitments: { name: string; amount: number; type: string; priority: string }[];
 }
 
 export interface Alert {

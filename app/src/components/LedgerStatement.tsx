@@ -66,7 +66,7 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
       result = result.filter(
         (e) =>
           e.description.toLowerCase().includes(q) ||
-          e.allocations?.some((a) => ("event_name" in a ? (a as { event_name: string }).event_name : "").toLowerCase().includes(q))
+          e.allocations?.some((a) => ("commitment_name" in a ? (a as { commitment_name: string }).commitment_name : "").toLowerCase().includes(q))
       );
     }
 
@@ -157,7 +157,7 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by description or event..."
+            placeholder="Search by description or commitment..."
             className="w-full sm:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
           />
         </div>
@@ -188,15 +188,15 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
                 <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Account</th>
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Events</th>
+                <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Commitments</th>
                 <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Running</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((entry) => {
                 const allocations = entry.allocations || [];
-                const eventNames = allocations
-                  .map((a) => ("event_name" in a ? (a as { event_name: string }).event_name : ""))
+                const commitmentNames = allocations
+                  .map((a) => ("commitment_name" in a ? (a as { commitment_name: string }).commitment_name : ""))
                   .filter(Boolean);
 
                 return (
@@ -224,10 +224,10 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
                       {accountMap[entry.account_id] || entry.account_id}
                     </td>
                     <td className="px-5 py-3">
-                      {eventNames.length > 0 ? (
+                      {commitmentNames.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {allocations.map((a, i) => {
-                            const name = "event_name" in a ? (a as { event_name: string }).event_name : "";
+                            const name = "commitment_name" in a ? (a as { commitment_name: string }).commitment_name : "";
                             if (!name) return null;
                             return (
                               <span

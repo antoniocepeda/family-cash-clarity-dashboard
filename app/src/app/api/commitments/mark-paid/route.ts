@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     );
 
   const db = getDb();
-  const event = db.prepare("SELECT * FROM events WHERE id = ?").get(id) as
+  const commitment = db.prepare("SELECT * FROM commitments WHERE id = ?").get(id) as
     | {
         id: string;
         name: string;
@@ -25,56 +25,56 @@ export async function POST(req: NextRequest) {
       }
     | undefined;
 
-  if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!commitment) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const paidDate = format(new Date(), "yyyy-MM-dd");
-  const targetDueDate = instance_due_date || event.due_date;
+  const targetDueDate = instance_due_date || commitment.due_date;
 
   const run = db.transaction(() => {
-    if (event.account_id) {
-      const impact = event.type === "income" ? actual_amount : -actual_amount;
+    if (commitment.account_id) {
+      const impact = commitment.type === "income" ? actual_amount : -actual_amount;
       db.prepare(
         "UPDATE accounts SET current_balance = current_balance + ?, updated_at = datetime('now') WHERE id = ?"
-      ).run(impact, event.account_id);
+      ).run(impact, commitment.account_id);
     }
 
     db.prepare(
-      "INSERT INTO event_history (id, event_id, amount, actual_amount, paid_date, due_date) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(randomUUID(), event.id, event.amount, actual_amount, paidDate, targetDueDate);
+      "INSERT INTO commitment_history (id, commitment_id, amount, actual_amount, paid_date, due_date) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(randomUUID(), commitment.id, commitment.amount, actual_amount, paidDate, targetDueDate);
 
     const ledgerId = randomUUID();
-    if (event.account_id) {
-      const ledgerType = event.type === "income" ? "income" : "expense";
-      const ledgerDesc = note ? `${event.name}: ${note}` : event.name;
+    if (commitment.account_id) {
+      const ledgerType = commitment.type === "income" ? "income" : "expense";
+      const ledgerDesc = note ? `${commitment.name}: ${note}` : commitment.name;
       db.prepare(
-        "INSERT INTO ledger (id, date, description, amount, type, account_id, event_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run(ledgerId, paidDate, ledgerDesc, actual_amount, ledgerType, event.account_id, event.id);
+        "INSERT INTO ledger (id, date, description, amount, type, account_id, commitment_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run(ledgerId, paidDate, ledgerDesc, actual_amount, ledgerType, commitment.account_id, commitment.id);
     }
 
-    const instanceId = ensureInstance(db, event.id, targetDueDate, event.amount);
-    const instance = db.prepare("SELECT planned_amount, allocated_amount FROM event_instances WHERE id = ?")
+    const instanceId = ensureInstance(db, commitment.id, targetDueDate, commitment.amount);
+    const instance = db.prepare("SELECT planned_amount, allocated_amount FROM commitment_instances WHERE id = ?")
       .get(instanceId) as { planned_amount: number; allocated_amount: number };
 
     const allocationAmount = actual_amount;
 
-    if (event.account_id) {
+    if (commitment.account_id) {
       db.prepare(
-        "INSERT INTO event_allocations (id, ledger_id, instance_id, event_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
-      ).run(randomUUID(), ledgerId, instanceId, event.id, allocationAmount, note || null);
+        "INSERT INTO commitment_allocations (id, ledger_id, instance_id, commitment_id, amount, note) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(randomUUID(), ledgerId, instanceId, commitment.id, allocationAmount, note || null);
     }
 
     const newAllocated = instance.allocated_amount + allocationAmount;
     const newStatus = newAllocated >= instance.planned_amount - 0.005 ? "funded" : "open";
 
     db.prepare(
-      "UPDATE event_instances SET allocated_amount = ?, status = ? WHERE id = ?"
+      "UPDATE commitment_instances SET allocated_amount = ?, status = ? WHERE id = ?"
     ).run(newAllocated, newStatus, instanceId);
 
-    if (event.recurrence_rule) {
+    if (commitment.recurrence_rule) {
       if (newStatus === "funded") {
-        const base = parseISO(event.due_date);
+        const base = parseISO(commitment.due_date);
         let next: Date;
-        switch (event.recurrence_rule) {
+        switch (commitment.recurrence_rule) {
           case "weekly":
             next = addDays(base, 7);
             break;
@@ -95,13 +95,13 @@ export async function POST(req: NextRequest) {
             break;
         }
         db.prepare(
-          "UPDATE events SET due_date = ?, paid = 0, actual_amount = NULL, paid_date = NULL WHERE id = ?"
+          "UPDATE commitments SET due_date = ?, paid = 0, actual_amount = NULL, paid_date = NULL WHERE id = ?"
         ).run(format(next, "yyyy-MM-dd"), id);
       }
     } else {
       if (newStatus === "funded") {
         db.prepare(
-          "UPDATE events SET paid = 1, actual_amount = ?, paid_date = ? WHERE id = ?"
+          "UPDATE commitments SET paid = 1, actual_amount = ?, paid_date = ? WHERE id = ?"
         ).run(actual_amount, paidDate, id);
       }
     }

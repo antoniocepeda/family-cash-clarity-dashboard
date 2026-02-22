@@ -2,64 +2,64 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Nav from "@/components/Nav";
-import UpcomingEvents from "@/components/UpcomingEvents";
-import { CashEventWithInstances, ProjectionDay } from "@/lib/types";
+import UpcomingCommitments from "@/components/UpcomingCommitments";
+import { CommitmentWithInstances } from "@/lib/types";
 
-export default function EventsPage() {
-  const [events, setEvents] = useState<CashEventWithInstances[]>([]);
+export default function CommitmentsPage() {
+  const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [loading, setLoading] = useState(true);
   const [simulatedIds, setSimulatedIds] = useState<Set<string>>(new Set());
 
-  const fetchEvents = useCallback(async () => {
+  const fetchCommitments = useCallback(async () => {
     try {
-      const res = await fetch("/api/events");
+      const res = await fetch("/api/commitments");
       const data = await res.json();
-      setEvents(data);
+      setCommitments(data);
     } catch (err) {
-      console.error("Failed to fetch events:", err);
+      console.error("Failed to fetch commitments:", err);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+    fetchCommitments();
+  }, [fetchCommitments]);
 
   const handleMarkPaid = async (id: string, actualAmount: number, instanceDueDate: string, note?: string) => {
-    await fetch("/api/events/mark-paid", {
+    await fetch("/api/commitments/mark-paid", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, actual_amount: actualAmount, instance_due_date: instanceDueDate, note }),
     });
-    fetchEvents();
+    fetchCommitments();
   };
 
   const handleRollover = async (id: string, instanceDueDate: string) => {
-    await fetch("/api/events/rollover", {
+    await fetch("/api/commitments/rollover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, instance_due_date: instanceDueDate }),
     });
-    fetchEvents();
+    fetchCommitments();
   };
 
-  const handleEditInstanceAmount = async (eventId: string, dueDate: string, newAmount: number) => {
-    await fetch("/api/event-instances", {
+  const handleEditInstanceAmount = async (commitmentId: string, dueDate: string, newAmount: number) => {
+    await fetch("/api/commitment-instances", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: eventId, due_date: dueDate, planned_amount: newAmount }),
+      body: JSON.stringify({ commitment_id: commitmentId, due_date: dueDate, planned_amount: newAmount }),
     });
-    fetchEvents();
+    fetchCommitments();
   };
 
-  const handleLeftover = async (eventId: string, instanceDueDate: string, action: "rollover" | "release") => {
-    await fetch("/api/events/leftover", {
+  const handleLeftover = async (commitmentId: string, instanceDueDate: string, action: "rollover" | "release") => {
+    await fetch("/api/commitments/leftover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: eventId, instance_due_date: instanceDueDate, action }),
+      body: JSON.stringify({ commitment_id: commitmentId, instance_due_date: instanceDueDate, action }),
     });
-    fetchEvents();
+    fetchCommitments();
   };
 
   const handleSimulateToggle = (id: string) => {
@@ -73,24 +73,24 @@ export default function EventsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <>
         <Nav />
-        <div className="flex items-center justify-center py-32">
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
-            <p className="mt-4 text-sm text-slate-500 font-medium">Loading events...</p>
+            <p className="mt-4 text-sm text-slate-500 font-medium">Loading commitments...</p>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6">
-        <UpcomingEvents
-          events={events}
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1">
+        <UpcomingCommitments
+          commitments={commitments}
           onMarkPaid={handleMarkPaid}
           onRollover={handleRollover}
           onEditInstanceAmount={handleEditInstanceAmount}
@@ -99,6 +99,6 @@ export default function EventsPage() {
           onSimulateToggle={handleSimulateToggle}
         />
       </main>
-    </div>
+    </>
   );
 }

@@ -2,9 +2,9 @@ import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { addDays, format, startOfDay } from "date-fns";
 import { expandRecurrence } from "./projection";
-import { EventInstance } from "./types";
+import { CommitmentInstance } from "./types";
 
-interface EventRow {
+interface CommitmentRow {
   id: string;
   name: string;
   type: "income" | "bill";
@@ -20,35 +20,35 @@ interface EventRow {
 
 export function ensureInstance(
   db: Database.Database,
-  eventId: string,
+  commitmentId: string,
   dueDate: string,
   plannedAmount: number
 ): string {
   db.prepare(
-    `INSERT OR IGNORE INTO event_instances (id, event_id, due_date, planned_amount)
+    `INSERT OR IGNORE INTO commitment_instances (id, commitment_id, due_date, planned_amount)
      VALUES (?, ?, ?, ?)`
-  ).run(randomUUID(), eventId, dueDate, plannedAmount);
+  ).run(randomUUID(), commitmentId, dueDate, plannedAmount);
 
   const row = db
-    .prepare("SELECT id FROM event_instances WHERE event_id = ? AND due_date = ?")
-    .get(eventId, dueDate) as { id: string };
+    .prepare("SELECT id FROM commitment_instances WHERE commitment_id = ? AND due_date = ?")
+    .get(commitmentId, dueDate) as { id: string };
 
   return row.id;
 }
 
 export function getInstanceRow(
   db: Database.Database,
-  eventId: string,
+  commitmentId: string,
   dueDate: string
-): EventInstance | null {
+): CommitmentInstance | null {
   const row = db
     .prepare(
-      `SELECT ei.*, e.name as event_name, e.type as event_type
-       FROM event_instances ei
-       JOIN events e ON e.id = ei.event_id
-       WHERE ei.event_id = ? AND ei.due_date = ?`
+      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
+       FROM commitment_instances ci
+       JOIN commitments c ON c.id = ci.commitment_id
+       WHERE ci.commitment_id = ? AND ci.due_date = ?`
     )
-    .get(eventId, dueDate) as (EventInstance & { event_name: string; event_type: string }) | undefined;
+    .get(commitmentId, dueDate) as (CommitmentInstance & { commitment_name: string; commitment_type: string }) | undefined;
 
   if (!row) return null;
 
@@ -60,32 +60,32 @@ export function getInstanceRow(
 
 export function getOrExpandInstances(
   db: Database.Database,
-  eventId: string,
+  commitmentId: string,
   windowEnd: Date
-): EventInstance[] {
-  const event = db
-    .prepare("SELECT * FROM events WHERE id = ?")
-    .get(eventId) as EventRow | undefined;
+): CommitmentInstance[] {
+  const commitment = db
+    .prepare("SELECT * FROM commitments WHERE id = ?")
+    .get(commitmentId) as CommitmentRow | undefined;
 
-  if (!event) return [];
+  if (!commitment) return [];
 
   const today = startOfDay(new Date());
-  const occurrences = expandRecurrence(event, today, windowEnd);
+  const occurrences = expandRecurrence(commitment, today, windowEnd);
 
   for (const occ of occurrences) {
     const dateStr = format(occ, "yyyy-MM-dd");
-    ensureInstance(db, eventId, dateStr, event.amount);
+    ensureInstance(db, commitmentId, dateStr, commitment.amount);
   }
 
   const rows = db
     .prepare(
-      `SELECT ei.*, e.name as event_name, e.type as event_type
-       FROM event_instances ei
-       JOIN events e ON e.id = ei.event_id
-       WHERE ei.event_id = ? AND ei.due_date >= ? AND ei.due_date <= ?
-       ORDER BY ei.due_date ASC`
+      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
+       FROM commitment_instances ci
+       JOIN commitments c ON c.id = ci.commitment_id
+       WHERE ci.commitment_id = ? AND ci.due_date >= ? AND ci.due_date <= ?
+       ORDER BY ci.due_date ASC`
     )
-    .all(eventId, format(today, "yyyy-MM-dd"), format(windowEnd, "yyyy-MM-dd")) as EventInstance[];
+    .all(commitmentId, format(today, "yyyy-MM-dd"), format(windowEnd, "yyyy-MM-dd")) as CommitmentInstance[];
 
   return rows.map((r) => ({
     ...r,
@@ -93,38 +93,38 @@ export function getOrExpandInstances(
   }));
 }
 
-export function getEligibleInstances(db: Database.Database): EventInstance[] {
+export function getEligibleInstances(db: Database.Database): CommitmentInstance[] {
   const today = startOfDay(new Date());
   const windowEnd = addDays(today, 28);
   const todayStr = format(today, "yyyy-MM-dd");
   const windowEndStr = format(windowEnd, "yyyy-MM-dd");
 
-  const events = db
-    .prepare("SELECT * FROM events WHERE active = 1 AND paid = 0")
-    .all() as EventRow[];
+  const commitments = db
+    .prepare("SELECT * FROM commitments WHERE active = 1 AND paid = 0")
+    .all() as CommitmentRow[];
 
-  for (const event of events) {
-    if (event.due_date < todayStr) {
-      ensureInstance(db, event.id, event.due_date, event.amount);
+  for (const commitment of commitments) {
+    if (commitment.due_date < todayStr) {
+      ensureInstance(db, commitment.id, commitment.due_date, commitment.amount);
     }
-    const occurrences = expandRecurrence(event, today, windowEnd);
+    const occurrences = expandRecurrence(commitment, today, windowEnd);
     for (const occ of occurrences) {
       const dateStr = format(occ, "yyyy-MM-dd");
-      ensureInstance(db, event.id, dateStr, event.amount);
+      ensureInstance(db, commitment.id, dateStr, commitment.amount);
     }
   }
 
   const rows = db
     .prepare(
-      `SELECT ei.*, e.name as event_name, e.type as event_type
-       FROM event_instances ei
-       JOIN events e ON e.id = ei.event_id
-       WHERE ei.status = 'open'
-         AND e.active = 1
-         AND ei.due_date <= ?
-       ORDER BY ei.due_date ASC`
+      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
+       FROM commitment_instances ci
+       JOIN commitments c ON c.id = ci.commitment_id
+       WHERE ci.status = 'open'
+         AND c.active = 1
+         AND ci.due_date <= ?
+       ORDER BY ci.due_date ASC`
     )
-    .all(windowEndStr) as EventInstance[];
+    .all(windowEndStr) as CommitmentInstance[];
 
   return rows.map((r) => ({
     ...r,
@@ -132,40 +132,40 @@ export function getEligibleInstances(db: Database.Database): EventInstance[] {
   }));
 }
 
-export function getAllInstancesForEvents(
+export function getAllInstancesForCommitments(
   db: Database.Database,
   windowEnd: Date
-): EventInstance[] {
+): CommitmentInstance[] {
   const today = startOfDay(new Date());
   const todayStr = format(today, "yyyy-MM-dd");
   const windowEndStr = format(windowEnd, "yyyy-MM-dd");
 
-  const events = db
-    .prepare("SELECT * FROM events WHERE active = 1")
-    .all() as EventRow[];
+  const commitments = db
+    .prepare("SELECT * FROM commitments WHERE active = 1")
+    .all() as CommitmentRow[];
 
-  for (const event of events) {
-    if (event.paid && !event.recurrence_rule) continue;
-    if (event.due_date < todayStr) {
-      ensureInstance(db, event.id, event.due_date, event.amount);
+  for (const commitment of commitments) {
+    if (commitment.paid && !commitment.recurrence_rule) continue;
+    if (commitment.due_date < todayStr) {
+      ensureInstance(db, commitment.id, commitment.due_date, commitment.amount);
     }
-    const occurrences = expandRecurrence(event, today, windowEnd);
+    const occurrences = expandRecurrence(commitment, today, windowEnd);
     for (const occ of occurrences) {
       const dateStr = format(occ, "yyyy-MM-dd");
-      ensureInstance(db, event.id, dateStr, event.amount);
+      ensureInstance(db, commitment.id, dateStr, commitment.amount);
     }
   }
 
   const rows = db
     .prepare(
-      `SELECT ei.*, e.name as event_name, e.type as event_type
-       FROM event_instances ei
-       JOIN events e ON e.id = ei.event_id
-       WHERE e.active = 1
-         AND ei.due_date <= ?
-       ORDER BY ei.due_date ASC`
+      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
+       FROM commitment_instances ci
+       JOIN commitments c ON c.id = ci.commitment_id
+       WHERE c.active = 1
+         AND ci.due_date <= ?
+       ORDER BY ci.due_date ASC`
     )
-    .all(windowEndStr) as EventInstance[];
+    .all(windowEndStr) as CommitmentInstance[];
 
   return rows.map((r) => ({
     ...r,

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Account, AllocationInput, EventInstance } from "@/lib/types";
+import { Account, AllocationInput, CommitmentInstance } from "@/lib/types";
 
 interface Props {
   accounts: Account[];
-  onAddEvent: (data: {
+  onAddCommitment: (data: {
     name: string;
     type: string;
     amount: number;
@@ -26,16 +26,16 @@ interface Props {
   }) => void;
 }
 
-type ModalType = "event" | "reconcile" | "account" | "transaction" | null;
+type ModalType = "commitment" | "reconcile" | "account" | "transaction" | null;
 
-export default function QuickActions({ accounts, onAddEvent, onReconcile, onAddAccount, onLogTransaction }: Props) {
+export default function QuickActions({ accounts, onAddCommitment, onReconcile, onAddAccount, onLogTransaction }: Props) {
   const [modal, setModal] = useState<ModalType>(null);
 
   return (
     <>
       <div className="flex flex-wrap gap-3">
         <button
-          onClick={() => setModal("event")}
+          onClick={() => setModal("commitment")}
           className="flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 transition-colors"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -72,12 +72,12 @@ export default function QuickActions({ accounts, onAddEvent, onReconcile, onAddA
         </button>
       </div>
 
-      {modal === "event" && (
-        <EventModal
+      {modal === "commitment" && (
+        <CommitmentModal
           accounts={accounts}
           onClose={() => setModal(null)}
           onSubmit={(data) => {
-            onAddEvent(data);
+            onAddCommitment(data);
             setModal(null);
           }}
         />
@@ -93,7 +93,7 @@ export default function QuickActions({ accounts, onAddEvent, onReconcile, onAddA
         />
       )}
       {modal === "transaction" && (
-        <TransactionModal
+        <TransactionWizard
           accounts={accounts}
           onClose={() => setModal(null)}
           onSubmit={(data) => {
@@ -118,10 +118,7 @@ export default function QuickActions({ accounts, onAddEvent, onReconcile, onAddA
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div
-        className="absolute inset-0"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0" onClick={onClose} />
       <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         {children}
       </div>
@@ -129,7 +126,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
   );
 }
 
-function EventModal({
+function CommitmentModal({
   accounts,
   onClose,
   onSubmit,
@@ -165,22 +162,14 @@ function EventModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-            <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            >
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               <option value="bill">Bill / Expense</option>
               <option value="income">Income</option>
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Priority</label>
-            <select
-              value={form.priority}
-              onChange={(e) => setForm({ ...form, priority: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            >
+            <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               <option value="critical">Critical</option>
               <option value="normal">Normal</option>
               <option value="flexible">Flexible</option>
@@ -189,44 +178,22 @@ function EventModal({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
-          <input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g., Electric Bill"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-          />
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Electric Bill" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($)</label>
-            <input
-              type="number"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            />
+            <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" min="0" step="0.01" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Due Date</label>
-            <input
-              type="date"
-              value={form.due_date}
-              onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            />
+            <input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Recurrence</label>
-            <select
-              value={form.recurrence_rule}
-              onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            >
+            <select value={form.recurrence_rule} onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               <option value="">One-time</option>
               <option value="weekly">Weekly</option>
               <option value="biweekly">Biweekly</option>
@@ -237,46 +204,19 @@ function EventModal({
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
-            <select
-              value={form.account_id}
-              onChange={(e) => setForm({ ...form, account_id: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
+            <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+              {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
             </select>
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={form.autopay}
-            onChange={(e) => setForm({ ...form, autopay: e.target.checked })}
-            className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-          />
+          <input type="checkbox" checked={form.autopay} onChange={(e) => setForm({ ...form, autopay: e.target.checked })} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
           Autopay enabled
         </label>
       </div>
       <div className="flex justify-end gap-3 mt-5">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() =>
-            onSubmit({
-              ...form,
-              amount: parseFloat(form.amount) || 0,
-            })
-          }
-          disabled={!form.name || !form.amount}
-          className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
+        <button onClick={() => onSubmit({ ...form, amount: parseFloat(form.amount) || 0 })} disabled={!form.name || !form.amount} className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           Add {form.type === "income" ? "Income" : "Bill"}
         </button>
       </div>
@@ -295,7 +235,6 @@ function ReconcileModal({
 }) {
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
   const [balance, setBalance] = useState("");
-
   const selected = accounts.find((a) => a.id === accountId);
 
   return (
@@ -304,49 +243,19 @@ function ReconcileModal({
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} — ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </option>
-            ))}
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+            {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name} — ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</option>))}
           </select>
         </div>
-        {selected && (
-          <p className="text-sm text-slate-500">
-            Current balance: <strong>${selected.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong>
-          </p>
-        )}
+        {selected && (<p className="text-sm text-slate-500">Current balance: <strong>${selected.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></p>)}
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Actual Balance ($)</label>
-          <input
-            type="number"
-            value={balance}
-            onChange={(e) => setBalance(e.target.value)}
-            placeholder="Enter what your bank shows"
-            step="0.01"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-          />
+          <input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="Enter what your bank shows" step="0.01" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
         </div>
       </div>
       <div className="flex justify-end gap-3 mt-5">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => onSubmit(accountId, parseFloat(balance))}
-          disabled={!balance}
-          className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Update Balance
-        </button>
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
+        <button onClick={() => onSubmit(accountId, parseFloat(balance))} disabled={!balance} className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Update Balance</button>
       </div>
     </Overlay>
   );
@@ -359,12 +268,7 @@ function AccountModal({
   onClose: () => void;
   onSubmit: (data: { name: string; type: string; current_balance: number; is_reserve: boolean }) => void;
 }) {
-  const [form, setForm] = useState({
-    name: "",
-    type: "checking",
-    current_balance: "",
-    is_reserve: false,
-  });
+  const [form, setForm] = useState({ name: "", type: "checking", current_balance: "", is_reserve: false });
 
   return (
     <Overlay onClose={onClose}>
@@ -372,21 +276,12 @@ function AccountModal({
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Account Name</label>
-          <input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g., Main Checking"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-          />
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Main Checking" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-            <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            >
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               <option value="checking">Checking</option>
               <option value="savings">Savings</option>
               <option value="cash">Cash</option>
@@ -395,58 +290,32 @@ function AccountModal({
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Balance ($)</label>
-            <input
-              type="number"
-              value={form.current_balance}
-              onChange={(e) => setForm({ ...form, current_balance: e.target.value })}
-              placeholder="0.00"
-              step="0.01"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            />
+            <input type="number" value={form.current_balance} onChange={(e) => setForm({ ...form, current_balance: e.target.value })} placeholder="0.00" step="0.01" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={form.is_reserve}
-            onChange={(e) => setForm({ ...form, is_reserve: e.target.checked })}
-            className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-          />
+          <input type="checkbox" checked={form.is_reserve} onChange={(e) => setForm({ ...form, is_reserve: e.target.checked })} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
           Reserve account (excluded from &ldquo;True Available&rdquo;)
         </label>
       </div>
       <div className="flex justify-end gap-3 mt-5">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() =>
-            onSubmit({
-              ...form,
-              current_balance: parseFloat(form.current_balance) || 0,
-            })
-          }
-          disabled={!form.name}
-          className="px-5 py-2 text-sm font-semibold text-white bg-slate-700 rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Add Account
-        </button>
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
+        <button onClick={() => onSubmit({ ...form, current_balance: parseFloat(form.current_balance) || 0 })} disabled={!form.name} className="px-5 py-2 text-sm font-semibold text-white bg-slate-700 rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Add Account</button>
       </div>
     </Overlay>
   );
 }
 
-interface AllocRow {
+/* ─── Transaction Wizard (2-step) ─── */
+
+interface ItemRow {
   key: number;
-  instanceKey: string;
+  description: string;
   amount: string;
-  note: string;
+  instanceKey: string;
 }
 
-function TransactionModal({
+function TransactionWizard({
   accounts,
   onClose,
   onSubmit,
@@ -461,250 +330,294 @@ function TransactionModal({
     allocations: AllocationInput[];
   }) => void;
 }) {
-  const [form, setForm] = useState({
-    description: "",
-    amount: "",
-    type: "expense",
-    account_id: accounts[0]?.id || "",
-  });
-
-  const [eligibleInstances, setEligibleInstances] = useState<EventInstance[]>([]);
-  const [allocRows, setAllocRows] = useState<AllocRow[]>([]);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [storeName, setStoreName] = useState("");
+  const [type, setType] = useState("expense");
+  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
+  const [items, setItems] = useState<ItemRow[]>([{ key: 0, description: "", amount: "", instanceKey: "" }]);
   const [nextKey, setNextKey] = useState(1);
+  const [eligibleInstances, setEligibleInstances] = useState<CommitmentInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
 
   useEffect(() => {
-    fetch("/api/event-instances")
+    fetch("/api/commitment-instances")
       .then((r) => r.json())
-      .then((data: EventInstance[]) => {
+      .then((data: CommitmentInstance[]) => {
         setEligibleInstances(data);
         setLoadingInstances(false);
       })
       .catch(() => setLoadingInstances(false));
   }, []);
 
-  const txAmount = parseFloat(form.amount) || 0;
-  const allocTotal = allocRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-  const unallocated = txAmount - allocTotal;
-  const isFullyAllocated = allocRows.length > 0 && Math.abs(unallocated) < 0.005;
-  const hasAllocations = allocRows.length > 0;
-
-  const allAllocsValid = allocRows.every((r) => {
-    const amt = parseFloat(r.amount) || 0;
-    if (amt <= 0 || !r.instanceKey) return false;
-    const inst = eligibleInstances.find((i) => `${i.event_id}|${i.due_date}` === r.instanceKey);
-    if (!inst) return false;
-    return amt <= inst.remaining_amount + 0.005;
-  });
-
-  const canSave =
-    form.description &&
-    txAmount > 0 &&
-    (!hasAllocations || (isFullyAllocated && allAllocsValid));
-
-  const addAllocRow = () => {
-    setAllocRows([...allocRows, { key: nextKey, instanceKey: "", amount: "", note: "" }]);
+  const addItem = () => {
+    setItems([...items, { key: nextKey, description: "", amount: "", instanceKey: "" }]);
     setNextKey(nextKey + 1);
   };
 
-  const removeAllocRow = (key: number) => {
-    setAllocRows(allocRows.filter((r) => r.key !== key));
+  const removeItem = (key: number) => {
+    if (items.length <= 1) return;
+    setItems(items.filter((i) => i.key !== key));
   };
 
-  const updateAllocRow = (key: number, field: "instanceKey" | "amount" | "note", value: string) => {
-    setAllocRows(allocRows.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+  const updateItem = (key: number, field: keyof ItemRow, value: string) => {
+    setItems(items.map((i) => (i.key === key ? { ...i, [field]: value } : i)));
   };
+
+  const totalAmount = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+
+  const itemsWithAllocations = items.filter((i) => i.instanceKey && (parseFloat(i.amount) || 0) > 0);
+
+  const allItemsValid = items.every((i) => {
+    const amt = parseFloat(i.amount) || 0;
+    if (amt <= 0 || !i.description) return false;
+    if (i.instanceKey) {
+      const inst = eligibleInstances.find((ei) => `${ei.commitment_id}|${ei.due_date}` === i.instanceKey);
+      if (!inst) return false;
+    }
+    return true;
+  });
+
+  const canSubmit = storeName.trim() && items.length > 0 && totalAmount > 0 && allItemsValid;
 
   const buildAllocations = (): AllocationInput[] => {
-    return allocRows.map((r) => {
-      const [event_id, instance_due_date] = r.instanceKey.split("|");
-      return { event_id, instance_due_date, amount: parseFloat(r.amount) || 0, note: r.note || undefined };
-    });
+    const grouped = new Map<string, { commitment_id: string; instance_due_date: string; amount: number; notes: string[] }>();
+
+    for (const item of itemsWithAllocations) {
+      const [commitment_id, instance_due_date] = item.instanceKey.split("|");
+      const amt = parseFloat(item.amount) || 0;
+
+      const existing = grouped.get(item.instanceKey);
+      if (existing) {
+        existing.amount += amt;
+        if (item.description) existing.notes.push(item.description);
+      } else {
+        grouped.set(item.instanceKey, {
+          commitment_id,
+          instance_due_date,
+          amount: amt,
+          notes: item.description ? [item.description] : [],
+        });
+      }
+    }
+
+    return Array.from(grouped.values()).map((g) => ({
+      commitment_id: g.commitment_id,
+      instance_due_date: g.instance_due_date,
+      amount: g.amount,
+      note: g.notes.join(", ") || undefined,
+    }));
   };
 
-  const usedInstanceKeys = new Set(allocRows.map((r) => r.instanceKey).filter(Boolean));
+  const handleSubmit = () => {
+    const allocations = buildAllocations();
+    const allocTotal = allocations.reduce((s, a) => s + a.amount, 0);
+    const hasAllocations = allocations.length > 0;
+
+    if (hasAllocations && Math.abs(allocTotal - totalAmount) > 0.005) {
+      onSubmit({
+        description: storeName,
+        amount: totalAmount,
+        type,
+        account_id: accountId,
+        allocations: [],
+      });
+    } else {
+      onSubmit({
+        description: storeName,
+        amount: totalAmount,
+        type,
+        account_id: accountId,
+        allocations,
+      });
+    }
+  };
 
   return (
-    <Overlay onClose={onClose}>
-      <h3 className="text-lg font-semibold text-slate-800 mb-4">Log Transaction</h3>
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">What was it?</label>
-          <input
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="e.g., Costco run, Gas, Lunch"
-            autoFocus
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($)</label>
-            <input
-              type="number"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-            <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-            >
-              <option value="expense">Spent</option>
-              <option value="income">Received</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">From Account</label>
-          <select
-            value={form.account_id}
-            onChange={(e) => setForm({ ...form, account_id: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
-          >
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} — ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </option>
-            ))}
-          </select>
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="absolute inset-0" onClick={onClose} />
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
 
-        {/* Allocation Section */}
-        <div className="border-t border-slate-200 pt-3 mt-3">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Allocate to Events
-            </label>
-            <button
-              type="button"
-              onClick={addAllocRow}
-              disabled={loadingInstances || eligibleInstances.length === 0}
-              className="text-xs font-medium text-amber-600 hover:text-amber-800 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
-            >
-              + Add Split
-            </button>
-          </div>
-
-          {loadingInstances && (
-            <p className="text-xs text-slate-400 italic">Loading events...</p>
-          )}
-
-          {!loadingInstances && eligibleInstances.length === 0 && (
-            <p className="text-xs text-slate-400 italic">No upcoming events to allocate to.</p>
-          )}
-
-          {allocRows.map((row) => {
-            const selectedInst = eligibleInstances.find(
-              (i) => `${i.event_id}|${i.due_date}` === row.instanceKey
-            );
-            const rowAmt = parseFloat(row.amount) || 0;
-            const overRemaining = selectedInst && rowAmt > selectedInst.remaining_amount + 0.005;
-
-            return (
-              <div key={row.key} className="mb-3 rounded-lg border border-slate-200 p-2 space-y-1.5">
-                <div className="flex items-start gap-2">
-                  <select
-                    value={row.instanceKey}
-                    onChange={(e) => updateAllocRow(row.key, "instanceKey", e.target.value)}
-                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
-                  >
-                    <option value="">Select event...</option>
-                    {eligibleInstances.map((inst) => {
-                      const key = `${inst.event_id}|${inst.due_date}`;
-                      const isUsed = usedInstanceKeys.has(key) && key !== row.instanceKey;
-                      return (
-                        <option key={key} value={key} disabled={isUsed}>
-                          {inst.event_name} — {inst.due_date} (${inst.remaining_amount.toFixed(2)} left)
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <input
-                    type="number"
-                    value={row.amount}
-                    onChange={(e) => updateAllocRow(row.key, "amount", e.target.value)}
-                    placeholder="$"
-                    min="0"
-                    step="0.01"
-                    className={`w-24 rounded-lg border px-2 py-1.5 text-xs focus:ring-2 outline-none ${
-                      overRemaining
-                        ? "border-red-400 focus:ring-red-400 focus:border-red-400"
-                        : "border-slate-300 focus:ring-amber-500 focus:border-amber-500"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeAllocRow(row.key)}
-                    className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                    title="Remove"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                <input
-                  value={row.note}
-                  onChange={(e) => updateAllocRow(row.key, "note", e.target.value)}
-                  placeholder="What was this for? (optional)"
-                  className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
-                />
+        {step === 1 && (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
               </div>
-            );
-          })}
-
-          {hasAllocations && txAmount > 0 && (
-            <div className="mt-2 space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Transaction total</span>
-                <span className="font-medium text-slate-700">${txAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Allocated</span>
-                <span className="font-medium text-slate-700">${allocTotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className={`font-semibold ${Math.abs(unallocated) < 0.005 ? "text-emerald-600" : "text-amber-600"}`}>
-                  {Math.abs(unallocated) < 0.005 ? "Fully allocated" : `$${unallocated.toFixed(2)} left to allocate`}
-                </span>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">Where are you shopping?</h3>
+                <p className="text-xs text-slate-400">Step 1 of 2</p>
               </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      <div className="flex justify-end gap-3 mt-5">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() =>
-            onSubmit({
-              description: form.description,
-              amount: txAmount,
-              type: form.type,
-              account_id: form.account_id,
-              allocations: hasAllocations ? buildAllocations() : [],
-            })
-          }
-          disabled={!canSave}
-          className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Log It
-        </button>
+            <input
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && storeName.trim()) setStep(2); }}
+              placeholder="e.g., Costco, Amazon, Target, Walmart"
+              autoFocus
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+            />
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => setStep(2)}
+                disabled={!storeName.trim()}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <>
+            <div className="p-6 pb-0">
+              <div className="flex items-center gap-3 mb-1">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                  title="Back to store name"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-slate-800">What are you buying?</h3>
+                  <p className="text-xs text-slate-400">
+                    Shopping at <span className="font-medium text-amber-600">{storeName}</span> · Step 2 of 2
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {items.map((item, idx) => (
+                <div key={item.key} className="rounded-xl border border-slate-200 p-3 space-y-2 bg-slate-50/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Item {idx + 1}</span>
+                    {items.length > 1 && (
+                      <button
+                        onClick={() => removeItem(item.key)}
+                        className="text-slate-300 hover:text-red-500 transition-colors"
+                        title="Remove item"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    value={item.description}
+                    onChange={(e) => updateItem(item.key, "description", e.target.value)}
+                    placeholder="What did you buy?"
+                    autoFocus={idx === items.length - 1}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) => updateItem(item.key, "amount", e.target.value)}
+                        placeholder="How much? ($)"
+                        min="0"
+                        step="0.01"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={item.instanceKey}
+                        onChange={(e) => updateItem(item.key, "instanceKey", e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                      >
+                        <option value="">No commitment</option>
+                        {!loadingInstances && eligibleInstances.map((inst) => {
+                          const key = `${inst.commitment_id}|${inst.due_date}`;
+                          return (
+                            <option key={key} value={key}>
+                              {inst.commitment_name} — {inst.due_date} (${inst.remaining_amount.toFixed(2)} left)
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={addItem}
+                className="w-full rounded-xl border-2 border-dashed border-slate-200 hover:border-amber-300 py-3 text-sm font-medium text-slate-400 hover:text-amber-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add another item
+              </button>
+            </div>
+
+            <div className="border-t border-slate-200 p-6 pt-4 space-y-3 bg-white rounded-b-2xl">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-600">Total</span>
+                <span className="text-lg font-bold text-slate-800">
+                  ${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Account</label>
+                  <select
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  >
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} — ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                  >
+                    <option value="expense">Spent</option>
+                    <option value="income">Received</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-1">
+                <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  className="px-6 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Log It
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
-    </Overlay>
+    </div>
   );
 }

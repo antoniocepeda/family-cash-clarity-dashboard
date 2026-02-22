@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { addDays, addWeeks, addMonths, format, parseISO, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 
-interface Event {
+interface CommitmentRow {
   id: string;
   name: string;
   type: "income" | "bill";
@@ -18,13 +18,13 @@ interface Event {
 interface ProjectionDay {
   date: string;
   balance: number;
-  events: { name: string; amount: number; type: string; priority: string }[];
+  commitments: { name: string; amount: number; type: string; priority: string }[];
 }
 
-export function expandRecurrence(event: Event, startDate: Date, endDate: Date): Date[] {
+export function expandRecurrence(commitment: CommitmentRow, startDate: Date, endDate: Date): Date[] {
   const dates: Date[] = [];
-  const rule = event.recurrence_rule;
-  const baseDate = startOfDay(parseISO(event.due_date));
+  const rule = commitment.recurrence_rule;
+  const baseDate = startOfDay(parseISO(commitment.due_date));
 
   if (!rule) {
     if (
@@ -78,16 +78,16 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
     current_balance: number;
     is_reserve: number;
   }[];
-  const events = db.prepare("SELECT * FROM events WHERE active = 1").all() as Event[];
+  const commitments = db.prepare("SELECT * FROM commitments WHERE active = 1").all() as CommitmentRow[];
 
   const instanceRows = db.prepare(
-    `SELECT event_id, due_date, planned_amount, allocated_amount, status
-     FROM event_instances`
-  ).all() as { event_id: string; due_date: string; planned_amount: number; allocated_amount: number; status: string }[];
+    `SELECT commitment_id, due_date, planned_amount, allocated_amount, status
+     FROM commitment_instances`
+  ).all() as { commitment_id: string; due_date: string; planned_amount: number; allocated_amount: number; status: string }[];
 
   const instanceMap = new Map<string, typeof instanceRows[0]>();
   for (const row of instanceRows) {
-    instanceMap.set(`${row.event_id}|${row.due_date}`, row);
+    instanceMap.set(`${row.commitment_id}|${row.due_date}`, row);
   }
 
   const simulateSet = new Set(simulateEarlyIds);
@@ -105,24 +105,24 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
   for (let i = 0; i <= days; i++) {
     const d = addDays(today, i);
     const key = format(d, "yyyy-MM-dd");
-    dayMap.set(key, { date: key, balance: runningBalance, events: [] });
+    dayMap.set(key, { date: key, balance: runningBalance, commitments: [] });
   }
 
-  for (const event of events) {
-    if (event.paid && !event.recurrence_rule) continue;
+  for (const commitment of commitments) {
+    if (commitment.paid && !commitment.recurrence_rule) continue;
 
-    const isSimulated = simulateSet.has(event.id);
+    const isSimulated = simulateSet.has(commitment.id);
 
     let occurrences: Date[];
     let overdueDateStr: string | null = null;
-    if (isSimulated && !event.recurrence_rule) {
+    if (isSimulated && !commitment.recurrence_rule) {
       occurrences = [today];
     } else {
-      occurrences = expandRecurrence(event, today, endDate);
-      const baseDate = startOfDay(parseISO(event.due_date));
+      occurrences = expandRecurrence(commitment, today, endDate);
+      const baseDate = startOfDay(parseISO(commitment.due_date));
       if (isBefore(baseDate, today)) {
         const baseDateStr = format(baseDate, "yyyy-MM-dd");
-        const overdueKey = `${event.id}|${baseDateStr}`;
+        const overdueKey = `${commitment.id}|${baseDateStr}`;
         const inst = instanceMap.get(overdueKey);
         if (!inst || inst.status !== "funded") {
           occurrences = [today, ...occurrences];
@@ -137,22 +137,22 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
       if (!day) continue;
 
       const isOverdueOcc = overdueDateStr && isEqual(occ, today);
-      const instanceLookup = isOverdueOcc ? `${event.id}|${overdueDateStr}` : `${event.id}|${key}`;
+      const instanceLookup = isOverdueOcc ? `${commitment.id}|${overdueDateStr}` : `${commitment.id}|${key}`;
       const instance = instanceMap.get(instanceLookup);
 
-      let effectiveAmount = event.amount;
+      let effectiveAmount = commitment.amount;
       if (instance) {
         if (instance.status === "funded") continue;
         effectiveAmount = instance.planned_amount - instance.allocated_amount;
         if (effectiveAmount <= 0.005) continue;
       }
 
-      const impact = event.type === "income" ? effectiveAmount : -effectiveAmount;
-      day.events.push({
-        name: event.name + (isSimulated ? " (simulated)" : ""),
+      const impact = commitment.type === "income" ? effectiveAmount : -effectiveAmount;
+      day.commitments.push({
+        name: commitment.name + (isSimulated ? " (simulated)" : ""),
         amount: effectiveAmount,
-        type: event.type,
-        priority: event.priority,
+        type: commitment.type,
+        priority: commitment.priority,
       });
 
       for (let j = dayMap.size - 1; j >= 0; j--) {
@@ -190,36 +190,36 @@ export function generateAlerts(): {
     }
   }
 
-  const events = db.prepare(
-    "SELECT * FROM events WHERE active = 1 AND type = 'bill' AND paid = 0"
-  ).all() as Event[];
+  const commitments = db.prepare(
+    "SELECT * FROM commitments WHERE active = 1 AND type = 'bill' AND paid = 0"
+  ).all() as CommitmentRow[];
   const now = new Date();
 
-  for (const event of events) {
-    const due = parseISO(event.due_date);
+  for (const commitment of commitments) {
+    const due = parseISO(commitment.due_date);
     const hoursUntil = (due.getTime() - now.getTime()) / (1000 * 60 * 60);
 
     const instanceRow = db.prepare(
-      "SELECT allocated_amount, planned_amount, status FROM event_instances WHERE event_id = ? AND due_date = ?"
-    ).get(event.id, event.due_date) as { allocated_amount: number; planned_amount: number; status: string } | undefined;
+      "SELECT allocated_amount, planned_amount, status FROM commitment_instances WHERE commitment_id = ? AND due_date = ?"
+    ).get(commitment.id, commitment.due_date) as { allocated_amount: number; planned_amount: number; status: string } | undefined;
 
     if (instanceRow?.status === "funded") continue;
 
     const remaining = instanceRow
       ? instanceRow.planned_amount - instanceRow.allocated_amount
-      : event.amount;
+      : commitment.amount;
 
-    if (hoursUntil < 0 && event.priority === "critical") {
+    if (hoursUntil < 0 && commitment.priority === "critical") {
       alerts.push({
         severity: "critical",
-        message: `Overdue critical bill: ${event.name} ($${remaining.toFixed(2)} remaining)`,
-        action_text: `Pay ${event.name} immediately`,
+        message: `Overdue critical bill: ${commitment.name} ($${remaining.toFixed(2)} remaining)`,
+        action_text: `Pay ${commitment.name} immediately`,
       });
-    } else if (hoursUntil >= 0 && hoursUntil <= 48 && !event.autopay) {
+    } else if (hoursUntil >= 0 && hoursUntil <= 48 && !commitment.autopay) {
       alerts.push({
         severity: "critical",
-        message: `${event.name} ($${remaining.toFixed(2)} remaining) due within 48 hours`,
-        action_text: `Schedule payment for ${event.name}`,
+        message: `${commitment.name} ($${remaining.toFixed(2)} remaining) due within 48 hours`,
+        action_text: `Schedule payment for ${commitment.name}`,
       });
     }
   }
@@ -236,8 +236,8 @@ export function generateAlerts(): {
   }
 
   for (const day of projection.slice(0, 4)) {
-    if (day.events.length > 0) {
-      const summary = day.events.map((e) => `${e.name} ($${e.amount.toFixed(2)})`).join(", ");
+    if (day.commitments.length > 0) {
+      const summary = day.commitments.map((c) => `${c.name} ($${c.amount.toFixed(2)})`).join(", ");
       alerts.push({
         severity: "info",
         message: `${day.date}: ${summary}`,

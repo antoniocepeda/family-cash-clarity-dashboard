@@ -10,34 +10,60 @@ export function getDb(): Database.Database {
     _db = new Database(DB_PATH);
     _db.pragma("journal_mode = WAL");
     _db.pragma("foreign_keys = ON");
+    migrateLegacySchema(_db);
     initSchema(_db);
     migrate(_db);
   }
   return _db;
 }
 
+function migrateLegacySchema(db: Database.Database) {
+  const tables = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    .all() as { name: string }[];
+  const tableNames = new Set(tables.map((t) => t.name));
+
+  if (tableNames.has("events")) {
+    db.pragma("foreign_keys = OFF");
+    db.exec("DROP TABLE IF EXISTS event_allocations");
+    db.exec("DROP TABLE IF EXISTS event_instances");
+    db.exec("DROP TABLE IF EXISTS event_history");
+
+    // Drop the old ledger table since its FK columns reference old schema
+    if (tableNames.has("ledger")) {
+      const cols = db.prepare("PRAGMA table_info(ledger)").all() as { name: string }[];
+      if (cols.some((c) => c.name === "event_id")) {
+        db.exec("DROP TABLE IF EXISTS ledger");
+      }
+    }
+
+    db.exec("DROP TABLE IF EXISTS events");
+    db.pragma("foreign_keys = ON");
+  }
+}
+
 function migrate(db: Database.Database) {
   const columns = db
-    .prepare("PRAGMA table_info(events)")
+    .prepare("PRAGMA table_info(commitments)")
     .all() as { name: string }[];
   const colNames = columns.map((c) => c.name);
 
   if (!colNames.includes("actual_amount")) {
-    db.exec("ALTER TABLE events ADD COLUMN actual_amount REAL");
+    db.exec("ALTER TABLE commitments ADD COLUMN actual_amount REAL");
   }
   if (!colNames.includes("paid_date")) {
-    db.exec("ALTER TABLE events ADD COLUMN paid_date TEXT");
+    db.exec("ALTER TABLE commitments ADD COLUMN paid_date TEXT");
   }
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS event_history (
+    CREATE TABLE IF NOT EXISTS commitment_history (
       id TEXT PRIMARY KEY,
-      event_id TEXT NOT NULL,
+      commitment_id TEXT NOT NULL,
       amount REAL NOT NULL,
       actual_amount REAL NOT NULL,
       paid_date TEXT NOT NULL,
       due_date TEXT NOT NULL,
-      FOREIGN KEY (event_id) REFERENCES events(id)
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id)
     )
   `);
 
@@ -49,45 +75,45 @@ function migrate(db: Database.Database) {
       amount REAL NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('expense','income')),
       account_id TEXT NOT NULL,
-      event_id TEXT,
+      commitment_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (account_id) REFERENCES accounts(id),
-      FOREIGN KEY (event_id) REFERENCES events(id)
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id)
     )
   `);
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS event_instances (
+    CREATE TABLE IF NOT EXISTS commitment_instances (
       id TEXT PRIMARY KEY,
-      event_id TEXT NOT NULL,
+      commitment_id TEXT NOT NULL,
       due_date TEXT NOT NULL,
       planned_amount REAL NOT NULL,
       allocated_amount REAL NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','funded')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY (event_id) REFERENCES events(id),
-      UNIQUE(event_id, due_date)
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id),
+      UNIQUE(commitment_id, due_date)
     )
   `);
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS event_allocations (
+    CREATE TABLE IF NOT EXISTS commitment_allocations (
       id TEXT PRIMARY KEY,
       ledger_id TEXT NOT NULL,
       instance_id TEXT NOT NULL,
-      event_id TEXT NOT NULL,
+      commitment_id TEXT NOT NULL,
       amount REAL NOT NULL,
       note TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (ledger_id) REFERENCES ledger(id),
-      FOREIGN KEY (instance_id) REFERENCES event_instances(id),
-      FOREIGN KEY (event_id) REFERENCES events(id)
+      FOREIGN KEY (instance_id) REFERENCES commitment_instances(id),
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id)
     )
   `);
 
-  const allocCols = db.prepare("PRAGMA table_info(event_allocations)").all() as { name: string }[];
+  const allocCols = db.prepare("PRAGMA table_info(commitment_allocations)").all() as { name: string }[];
   if (!allocCols.some((c) => c.name === "note")) {
-    db.exec("ALTER TABLE event_allocations ADD COLUMN note TEXT");
+    db.exec("ALTER TABLE commitment_allocations ADD COLUMN note TEXT");
   }
 }
 
@@ -102,7 +128,7 @@ function initSchema(db: Database.Database) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS events (
+    CREATE TABLE IF NOT EXISTS commitments (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('income','bill')),
@@ -120,14 +146,14 @@ function initSchema(db: Database.Database) {
       FOREIGN KEY (account_id) REFERENCES accounts(id)
     );
 
-    CREATE TABLE IF NOT EXISTS event_history (
+    CREATE TABLE IF NOT EXISTS commitment_history (
       id TEXT PRIMARY KEY,
-      event_id TEXT NOT NULL,
+      commitment_id TEXT NOT NULL,
       amount REAL NOT NULL,
       actual_amount REAL NOT NULL,
       paid_date TEXT NOT NULL,
       due_date TEXT NOT NULL,
-      FOREIGN KEY (event_id) REFERENCES events(id)
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id)
     );
 
     CREATE TABLE IF NOT EXISTS ledger (
@@ -137,10 +163,10 @@ function initSchema(db: Database.Database) {
       amount REAL NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('expense','income')),
       account_id TEXT NOT NULL,
-      event_id TEXT,
+      commitment_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (account_id) REFERENCES accounts(id),
-      FOREIGN KEY (event_id) REFERENCES events(id)
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id)
     );
 
     CREATE TABLE IF NOT EXISTS alerts (
@@ -148,7 +174,7 @@ function initSchema(db: Database.Database) {
       severity TEXT NOT NULL CHECK(severity IN ('critical','warning','info')),
       message TEXT NOT NULL,
       action_text TEXT,
-      event_id TEXT,
+      commitment_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       resolved_at TEXT
     );

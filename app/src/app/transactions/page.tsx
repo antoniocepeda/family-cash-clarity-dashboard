@@ -18,24 +18,24 @@ export default function TransactionsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <>
         <Nav />
-        <div className="flex items-center justify-center py-32">
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
             <p className="mt-4 text-sm text-slate-500 font-medium">Loading transactions...</p>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1">
         <LedgerStatement accounts={accounts} />
       </main>
-    </div>
+    </>
   );
 }

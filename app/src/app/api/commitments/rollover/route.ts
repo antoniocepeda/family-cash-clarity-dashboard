@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const db = getDb();
-  const event = db.prepare("SELECT * FROM events WHERE id = ?").get(id) as
+  const commitment = db.prepare("SELECT * FROM commitments WHERE id = ?").get(id) as
     | {
         id: string;
         name: string;
@@ -21,21 +21,21 @@ export async function POST(req: NextRequest) {
       }
     | undefined;
 
-  if (!event) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!commitment) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const targetDueDate = instance_due_date || event.due_date;
+  const targetDueDate = instance_due_date || commitment.due_date;
 
   const run = db.transaction(() => {
-    const instanceId = ensureInstance(db, event.id, targetDueDate, event.amount);
+    const instanceId = ensureInstance(db, commitment.id, targetDueDate, commitment.amount);
 
     db.prepare(
-      "UPDATE event_instances SET status = 'funded' WHERE id = ?"
+      "UPDATE commitment_instances SET status = 'funded' WHERE id = ?"
     ).run(instanceId);
 
-    if (event.recurrence_rule) {
-      const base = parseISO(event.due_date);
+    if (commitment.recurrence_rule) {
+      const base = parseISO(commitment.due_date);
       let next: Date;
-      switch (event.recurrence_rule) {
+      switch (commitment.recurrence_rule) {
         case "weekly":
           next = addDays(base, 7);
           break;
@@ -56,11 +56,11 @@ export async function POST(req: NextRequest) {
           break;
       }
       db.prepare(
-        "UPDATE events SET due_date = ?, paid = 0, actual_amount = NULL, paid_date = NULL WHERE id = ?"
+        "UPDATE commitments SET due_date = ?, paid = 0, actual_amount = NULL, paid_date = NULL WHERE id = ?"
       ).run(format(next, "yyyy-MM-dd"), id);
     } else {
       db.prepare(
-        "UPDATE events SET paid = 1, paid_date = ? WHERE id = ?"
+        "UPDATE commitments SET paid = 1, paid_date = ? WHERE id = ?"
       ).run(format(new Date(), "yyyy-MM-dd"), id);
     }
   });

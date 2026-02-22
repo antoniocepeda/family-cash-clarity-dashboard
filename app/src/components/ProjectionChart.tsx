@@ -31,7 +31,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
   if (projection.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400">
-        No projection data available. Add accounts and events to get started.
+        No projection data available. Add accounts and commitments to get started.
       </div>
     );
   }
@@ -120,11 +120,11 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
                   <p className={`text-lg font-bold ${d.balance < 0 ? "text-red-600" : "text-emerald-600"}`}>
                     {fmt(d.balance)}
                   </p>
-                  {d.events.length > 0 && (
+                  {d.commitments.length > 0 && (
                     <div className="mt-1.5 border-t border-slate-100 pt-1.5 space-y-0.5">
-                      {d.events.map((e: { type: string; name: string; amount: number }, i: number) => (
+                      {d.commitments.map((c: { type: string; name: string; amount: number }, i: number) => (
                         <p key={i} className="text-xs text-slate-500">
-                          {e.type === "income" ? "+" : "−"}${e.amount} {e.name}
+                          {c.type === "income" ? "+" : "−"}${c.amount} {c.name}
                         </p>
                       ))}
                     </div>

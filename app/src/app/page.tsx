@@ -7,11 +7,11 @@ import NextBills from "@/components/NextBills";
 import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
-import { Account, CashEventWithInstances, AllocationInput, ProjectionDay, Alert } from "@/lib/types";
+import { Account, CommitmentWithInstances, AllocationInput, ProjectionDay, Alert } from "@/lib/types";
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [events, setEvents] = useState<CashEventWithInstances[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,19 +27,19 @@ export default function Dashboard() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [acctRes, evtRes, proj, alertRes] = await Promise.all([
+      const [acctRes, cmtRes, proj, alertRes] = await Promise.all([
         fetch("/api/accounts"),
-        fetch("/api/events"),
+        fetch("/api/commitments"),
         fetchProjection(),
         fetch("/api/alerts"),
       ]);
-      const [accts, evts, alts] = await Promise.all([
+      const [accts, cmts, alts] = await Promise.all([
         acctRes.json(),
-        evtRes.json(),
+        cmtRes.json(),
         alertRes.json(),
       ]);
       setAccounts(accts);
-      setEvents(evts);
+      setCommitments(cmts);
       setProjection(proj);
       setAlerts(alts);
       setLastUpdated(new Date().toISOString());
@@ -59,7 +59,7 @@ export default function Dashboard() {
     fetchProjection(days).then(setProjection);
   };
 
-  const handleAddEvent = async (data: {
+  const handleAddCommitment = async (data: {
     name: string;
     type: string;
     amount: number;
@@ -69,7 +69,7 @@ export default function Dashboard() {
     autopay: boolean;
     account_id: string;
   }) => {
-    await fetch("/api/events", {
+    await fetch("/api/commitments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -117,7 +117,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
           <p className="mt-4 text-sm text-slate-500 font-medium">Loading dashboard...</p>
@@ -127,10 +127,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <>
       <Nav />
 
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-6">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-6 flex-1 w-full">
         <CashPositionStrip accounts={accounts} lastUpdated={lastUpdated} />
 
         {alerts.filter((a) => a.severity === "critical" || a.severity === "warning").length > 0 && (
@@ -139,7 +139,7 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
           <div className="lg:col-span-1 flex flex-col">
-            <NextBills events={events} />
+            <NextBills commitments={commitments} />
           </div>
           <div className="lg:col-span-2 flex flex-col">
             <ProjectionChart
@@ -154,22 +154,13 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
           <QuickActions
             accounts={accounts}
-            onAddEvent={handleAddEvent}
+            onAddCommitment={handleAddCommitment}
             onReconcile={handleSyncWithBank}
             onAddAccount={handleAddAccount}
             onLogTransaction={handleLogTransaction}
           />
         </div>
       </main>
-
-      <footer className="border-t border-slate-200 bg-white mt-8">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-slate-400">
-          <span>Family Cash Clarity Dashboard v2</span>
-          <span>
-            {accounts.length} accounts · {events.filter((e) => e.active).length} active events
-          </span>
-        </div>
-      </footer>
-    </div>
+    </>
   );
 }
