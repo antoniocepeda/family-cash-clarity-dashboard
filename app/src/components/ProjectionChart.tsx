@@ -13,11 +13,21 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 
+type TimeRange = 28 | 60 | 90;
+
 interface Props {
   projection: ProjectionDay[];
+  projectionDays?: TimeRange;
+  onDaysChange?: (days: TimeRange) => void;
 }
 
-export default function ProjectionChart({ projection }: Props) {
+const timeRangeOptions: { value: TimeRange; label: string }[] = [
+  { value: 28, label: "1 Month" },
+  { value: 60, label: "2 Months" },
+  { value: 90, label: "3 Months" },
+];
+
+export default function ProjectionChart({ projection, projectionDays = 28, onDaysChange }: Props) {
   if (projection.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400">
@@ -45,12 +55,31 @@ export default function ProjectionChart({ projection }: Props) {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">28-Day Cash Projection</h2>
-        {hasNegative && dangerDay && (
-          <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
-            Goes negative {format(parseISO(dangerDay.date), "MMM d")}
-          </span>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-slate-800">Cash Projection</h2>
+          {hasNegative && dangerDay && (
+            <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
+              Goes negative {format(parseISO(dangerDay.date), "MMM d")}
+            </span>
+          )}
+        </div>
+        {onDaysChange && (
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            {timeRangeOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onDaysChange(opt.value)}
+                className={`text-xs font-medium px-3 py-1.5 transition-colors ${
+                  projectionDays === opt.value
+                    ? "bg-sky-100 text-sky-700"
+                    : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <ResponsiveContainer width="100%" height={280}>

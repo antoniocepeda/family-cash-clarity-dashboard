@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { CashEventWithInstances, EventInstance } from "@/lib/types";
 import {
   format, parseISO, differenceInDays, addDays, addWeeks, addMonths,
@@ -11,6 +11,8 @@ interface Props {
   events: CashEventWithInstances[];
   onMarkPaid: (id: string, actualAmount: number, instanceDueDate: string, note?: string) => void;
   onRollover: (id: string, instanceDueDate: string) => void;
+  onEditInstanceAmount?: (eventId: string, dueDate: string, newAmount: number) => void;
+  onLeftover?: (eventId: string, instanceDueDate: string, action: "rollover" | "release") => void;
   simulatedIds: Set<string>;
   onSimulateToggle: (id: string) => void;
 }
@@ -96,10 +98,20 @@ function expandEventOccurrences(
   return rows;
 }
 
-export default function UpcomingEvents({ events, onMarkPaid, onRollover, simulatedIds, onSimulateToggle }: Props) {
+export default function UpcomingEvents({ events, onMarkPaid, onRollover, onEditInstanceAmount, onLeftover, simulatedIds, onSimulateToggle }: Props) {
   const [confirmingRow, setConfirmingRow] = useState<OccurrenceRow | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
   const today = startOfDay(new Date());
   const projectionCutoff = addDays(today, 28);
+
+  useEffect(() => {
+    if (editingKey && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingKey]);
 
   const active = events.filter((e) => e.active && !e.paid);
 
@@ -174,33 +186,87 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, simulat
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      <div>
-                        <div className="flex items-baseline gap-1">
-                          <span
-                            className={`font-semibold ${
-                              event.type === "income" ? "text-emerald-600" : "text-slate-800"
-                            }`}
+                      {(() => {
+                        const rowKey = `${event.id}-${format(occurrenceDate, "yyyy-MM-dd")}`;
+                        const isEditing = editingKey === rowKey;
+
+                        const handleStartEdit = () => {
+                          if (!onEditInstanceAmount || isFunded) return;
+                          setEditingKey(rowKey);
+                          setEditValue(planned.toFixed(2));
+                        };
+
+                        const handleSaveEdit = () => {
+                          const newAmount = parseFloat(editValue);
+                          if (!isNaN(newAmount) && newAmount >= 0 && onEditInstanceAmount) {
+                            onEditInstanceAmount(event.id, format(occurrenceDate, "yyyy-MM-dd"), newAmount);
+                          }
+                          setEditingKey(null);
+                        };
+
+                        const handleCancelEdit = () => setEditingKey(null);
+
+                        if (isEditing) {
+                          return (
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-400 text-sm">$</span>
+                              <input
+                                ref={editInputRef}
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleSaveEdit();
+                                  if (e.key === "Escape") handleCancelEdit();
+                                }}
+                                onBlur={handleSaveEdit}
+                                min="0"
+                                step="0.01"
+                                className="w-24 rounded border border-sky-300 px-2 py-1 text-sm font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
+                              />
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            className={`group ${onEditInstanceAmount && !isFunded ? "cursor-pointer" : ""}`}
+                            onClick={handleStartEdit}
+                            title={onEditInstanceAmount && !isFunded ? "Click to edit amount" : undefined}
                           >
-                            {event.type === "income" ? "+" : "−"}$
-                            {remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </span>
-                          {allocated > 0.005 && (
-                            <span className="text-[10px] text-slate-400">
-                              / ${planned.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </span>
-                          )}
-                        </div>
-                        {allocated > 0.005 && (
-                          <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                isFunded ? "bg-emerald-400" : "bg-amber-400"
-                              }`}
-                              style={{ width: `${progressPct}%` }}
-                            />
+                            <div className="flex items-baseline gap-1">
+                              <span
+                                className={`font-semibold ${
+                                  event.type === "income" ? "text-emerald-600" : "text-slate-800"
+                                }`}
+                              >
+                                {event.type === "income" ? "+" : "−"}$
+                                {remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              </span>
+                              {allocated > 0.005 && (
+                                <span className="text-[10px] text-slate-400">
+                                  / ${planned.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              )}
+                              {onEditInstanceAmount && !isFunded && (
+                                <svg className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              )}
+                            </div>
+                            {allocated > 0.005 && (
+                              <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    isFunded ? "bg-emerald-400" : "bg-amber-400"
+                                  }`}
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-1.5">
@@ -249,6 +315,29 @@ export default function UpcomingEvents({ events, onMarkPaid, onRollover, simulat
                             </svg>
                             Done
                           </span>
+                        ) : isOverdue && event.recurrence_rule && remaining > 0.005 && onLeftover ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                const dueDate = format(occurrenceDate, "yyyy-MM-dd");
+                                onLeftover(event.id, dueDate, "rollover");
+                              }}
+                              className="text-xs font-medium text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                              title="Carry leftover into next period's envelope"
+                            >
+                              Roll Over ${remaining.toFixed(2)}
+                            </button>
+                            <button
+                              onClick={() => {
+                                const dueDate = format(occurrenceDate, "yyyy-MM-dd");
+                                onLeftover(event.id, dueDate, "release");
+                              }}
+                              className="text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                              title="Release unspent amount back to cash on hand"
+                            >
+                              Release ${remaining.toFixed(2)}
+                            </button>
+                          </>
                         ) : (
                           <>
                             <button

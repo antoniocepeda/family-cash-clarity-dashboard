@@ -8,6 +8,8 @@ import ProjectionChart from "@/components/ProjectionChart";
 import UpcomingEvents from "@/components/UpcomingEvents";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
+import LedgerStatement from "@/components/LedgerStatement";
+import SpendingTrends from "@/components/SpendingTrends";
 import { Account, CashEventWithInstances, AllocationInput, ProjectionDay, Alert } from "@/lib/types";
 
 export default function Dashboard() {
@@ -18,15 +20,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
   const [simulatedIds, setSimulatedIds] = useState<Set<string>>(new Set());
+  const [projectionDays, setProjectionDays] = useState<28 | 60 | 90>(28);
 
-  const fetchProjection = useCallback(async (simIds: Set<string>) => {
+  const fetchProjection = useCallback(async (simIds: Set<string>, days?: number) => {
     const params = new URLSearchParams();
+    params.set("days", String(days ?? projectionDays));
     if (simIds.size > 0) {
       params.set("simulate_early", Array.from(simIds).join(","));
     }
     const res = await fetch(`/api/projections?${params.toString()}`);
     return res.json();
-  }, []);
+  }, [projectionDays]);
 
   const fetchAll = useCallback(async (simIds?: Set<string>) => {
     const activeSimIds = simIds ?? simulatedIds;
@@ -58,6 +62,11 @@ export default function Dashboard() {
     fetchAll();
   }, [fetchAll]);
 
+  const handleProjectionDaysChange = (days: 28 | 60 | 90) => {
+    setProjectionDays(days);
+    fetchProjection(simulatedIds, days).then(setProjection);
+  };
+
   const handleSimulateToggle = (id: string) => {
     setSimulatedIds((prev) => {
       const next = new Set(prev);
@@ -85,6 +94,24 @@ export default function Dashboard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, instance_due_date: instanceDueDate }),
+    });
+    fetchAll();
+  };
+
+  const handleEditInstanceAmount = async (eventId: string, dueDate: string, newAmount: number) => {
+    await fetch("/api/event-instances", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_id: eventId, due_date: dueDate, planned_amount: newAmount }),
+    });
+    fetchAll();
+  };
+
+  const handleLeftover = async (eventId: string, instanceDueDate: string, action: "rollover" | "release") => {
+    await fetch("/api/events/leftover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_id: eventId, instance_due_date: instanceDueDate, action }),
     });
     fetchAll();
   };
@@ -172,7 +199,11 @@ export default function Dashboard() {
             <NextBills events={events} />
           </div>
           <div className="lg:col-span-2">
-            <ProjectionChart projection={projection} />
+            <ProjectionChart
+              projection={projection}
+              projectionDays={projectionDays}
+              onDaysChange={handleProjectionDaysChange}
+            />
           </div>
         </div>
 
@@ -180,9 +211,15 @@ export default function Dashboard() {
           events={events}
           onMarkPaid={handleMarkPaid}
           onRollover={handleRollover}
+          onEditInstanceAmount={handleEditInstanceAmount}
+          onLeftover={handleLeftover}
           simulatedIds={simulatedIds}
           onSimulateToggle={handleSimulateToggle}
         />
+
+        <LedgerStatement accounts={accounts} />
+
+        <SpendingTrends />
 
         <div className="border-t border-slate-200 pt-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
