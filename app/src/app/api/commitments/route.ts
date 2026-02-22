@@ -85,6 +85,22 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const db = getDb();
-  db.prepare("DELETE FROM commitments WHERE id = ?").run(id);
+
+  const run = db.transaction(() => {
+    db.prepare("DELETE FROM commitment_allocations WHERE commitment_id = ?").run(id);
+    db.prepare("DELETE FROM commitment_instances WHERE commitment_id = ?").run(id);
+    db.prepare("DELETE FROM commitment_history WHERE commitment_id = ?").run(id);
+    db.prepare("UPDATE ledger SET commitment_id = NULL WHERE commitment_id = ?").run(id);
+    db.prepare("UPDATE alerts SET commitment_id = NULL WHERE commitment_id = ?").run(id);
+    db.prepare("DELETE FROM commitments WHERE id = ?").run(id);
+  });
+
+  try {
+    run();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+
   return NextResponse.json({ success: true });
 }
