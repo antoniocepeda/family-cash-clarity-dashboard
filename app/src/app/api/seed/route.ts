@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const now = new Date().toISOString();
 
+  db.prepare("DELETE FROM event_allocations").run();
+  db.prepare("DELETE FROM event_instances").run();
   db.prepare("DELETE FROM ledger").run();
   db.prepare("DELETE FROM event_history").run();
   db.prepare("DELETE FROM events").run();
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
   ).run(checkingId, "Main Checking", "checking", checkingBalance, 0, now);
 
   const bills: { name: string; amount: number; due: string; recurrence: string; priority: string; autopay: boolean }[] = [
-    { name: "Rent + Utilities Bundle", amount: 2500, due: nextDueDate(1), recurrence: "monthly", priority: "critical", autopay: false },
+    { name: "Rent + Utilities Bundle", amount: 2500, due: nextDueDate(3), recurrence: "monthly", priority: "critical", autopay: false },
     { name: "Electricity", amount: 350, due: nextDueDate(2), recurrence: "monthly", priority: "critical", autopay: false },
     { name: "Internet", amount: 100, due: nextDueDate(23), recurrence: "monthly", priority: "normal", autopay: true },
     { name: "Car Note (VW)", amount: 370, due: nextDueDate(14), recurrence: "monthly", priority: "critical", autopay: true },
@@ -48,6 +50,11 @@ export async function POST(req: NextRequest) {
     { name: "Nintendo", amount: 5, due: nextDueDate(12), recurrence: "monthly", priority: "flexible", autopay: true },
     { name: "Luca iPad Game", amount: 7, due: nextDueDate(9), recurrence: "monthly", priority: "flexible", autopay: true },
     { name: "Lucy Roblox", amount: 8, due: nextDueDate(27), recurrence: "monthly", priority: "flexible", autopay: true },
+    { name: "Luca's Groceries", amount: 60, due: nextDueDate(22), recurrence: "weekly", priority: "normal", autopay: false },
+    { name: "Groceries", amount: 100, due: nextDueDate(22), recurrence: "weekly", priority: "normal", autopay: false },
+    { name: "Niko's Food", amount: 55, due: nextDueDate(22), recurrence: "biweekly", priority: "normal", autopay: false },
+    { name: "Artemis' Food", amount: 25, due: nextDueDate(27), recurrence: "biweekly", priority: "normal", autopay: false },
+    { name: "Gas", amount: 30, due: nextDueDate(28), recurrence: "biweekly", priority: "normal", autopay: false },
   ];
 
   const income: { name: string; amount: number; due: string; recurrence: string; priority: string }[] = [
