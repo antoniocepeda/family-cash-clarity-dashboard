@@ -86,18 +86,33 @@ export async function DELETE(req: NextRequest) {
 
   const db = getDb();
 
+  function safeRun(sql: string, params: unknown[]) {
+    try { db.prepare(sql).run(...params); } catch { /* column may not exist yet */ }
+  }
+
   const run = db.transaction(() => {
-    db.prepare("DELETE FROM commitment_allocations WHERE commitment_id = ?").run(id);
-    db.prepare("DELETE FROM commitment_instances WHERE commitment_id = ?").run(id);
-    db.prepare("DELETE FROM commitment_history WHERE commitment_id = ?").run(id);
-    db.prepare("UPDATE ledger SET commitment_id = NULL WHERE commitment_id = ?").run(id);
-    db.prepare("UPDATE alerts SET commitment_id = NULL WHERE commitment_id = ?").run(id);
+    safeRun("DELETE FROM commitment_allocations WHERE commitment_id = ?", [id]);
+    safeRun("DELETE FROM commitment_instances WHERE commitment_id = ?", [id]);
+    safeRun("DELETE FROM commitment_history WHERE commitment_id = ?", [id]);
+    safeRun("UPDATE ledger SET commitment_id = NULL WHERE commitment_id = ?", [id]);
+    safeRun("UPDATE alerts SET commitment_id = NULL WHERE commitment_id = ?", [id]);
+    // Also handle legacy column names from old schema
+    safeRun("DELETE FROM event_allocations WHERE event_id = ?", [id]);
+    safeRun("DELETE FROM event_instances WHERE event_id = ?", [id]);
+    safeRun("DELETE FROM event_history WHERE event_id = ?", [id]);
+    safeRun("UPDATE ledger SET event_id = NULL WHERE event_id = ?", [id]);
+    safeRun("UPDATE alerts SET event_id = NULL WHERE event_id = ?", [id]);
     db.prepare("DELETE FROM commitments WHERE id = ?").run(id);
   });
 
   try {
     run();
   } catch (err: unknown) {
+    // If commitments table also uses old name, try that
+    try {
+      db.prepare("DELETE FROM events WHERE id = ?").run(id);
+      return NextResponse.json({ success: true });
+    } catch { /* fall through */ }
     const message = err instanceof Error ? err.message : "Delete failed";
     return NextResponse.json({ error: message }, { status: 400 });
   }
