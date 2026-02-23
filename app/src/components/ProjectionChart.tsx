@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 
-type TimeRange = 28 | 60 | 90;
+type TimeRange = 28 | 60 | 90 | 120 | 150 | 180;
 
 interface Props {
   projection: ProjectionDay[];
@@ -25,6 +25,9 @@ const timeRangeOptions: { value: TimeRange; label: string }[] = [
   { value: 28, label: "1 Month" },
   { value: 60, label: "2 Months" },
   { value: 90, label: "3 Months" },
+  { value: 120, label: "4 Months" },
+  { value: 150, label: "5 Months" },
+  { value: 180, label: "6 Months" },
 ];
 
 export default function ProjectionChart({ projection, projectionDays = 28, onDaysChange }: Props) {
