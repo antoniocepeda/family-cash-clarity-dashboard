@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [projectionDays, setProjectionDays] = useState<28 | 60 | 90>(28);
+  const [projectionDays, setProjectionDays] = useState<28 | 60 | 90 | 120 | 150 | 180>(28);
 
   const fetchProjection = useCallback(async (days?: number) => {
     const params = new URLSearchParams();
@@ -54,7 +54,7 @@ export default function Dashboard() {
     fetchAll();
   }, [fetchAll]);
 
-  const handleProjectionDaysChange = (days: 28 | 60 | 90) => {
+  const handleProjectionDaysChange = (days: 28 | 60 | 90 | 120 | 150 | 180) => {
     setProjectionDays(days);
     fetchProjection(days).then(setProjection);
   };
