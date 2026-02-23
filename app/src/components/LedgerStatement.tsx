@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { LedgerEntry } from "@/lib/types";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, isWithinInterval } from "date-fns";
 
@@ -10,13 +10,28 @@ interface AccountMap {
   [id: string]: string;
 }
 
-export default function LedgerStatement({ accounts }: { accounts: { id: string; name: string }[] }) {
+interface EditForm {
+  description: string;
+  amount: string;
+  type: "expense" | "income";
+}
+
+export default function LedgerStatement({
+  accounts,
+  onRefresh,
+}: {
+  accounts: { id: string; name: string }[];
+  onRefresh?: () => void;
+}) {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("this_month");
   const [searchQuery, setSearchQuery] = useState("");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ description: "", amount: "", type: "expense" });
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const accountMap = useMemo<AccountMap>(() => {
     const map: AccountMap = {};
@@ -24,7 +39,7 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
     return map;
   }, [accounts]);
 
-  useEffect(() => {
+  const fetchEntries = useCallback(() => {
     fetch("/api/ledger")
       .then((r) => r.json())
       .then((data) => {
@@ -33,6 +48,82 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
       })
       .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchEntries();
+  }, [fetchEntries]);
+
+  const refreshAll = useCallback(() => {
+    fetchEntries();
+    onRefresh?.();
+  }, [fetchEntries, onRefresh]);
+
+  const handleDelete = async (entry: LedgerEntry) => {
+    if (!confirm(`Delete "${entry.description}" for $${entry.amount.toFixed(2)}? This will reverse the account balance and any commitment allocations.`))
+      return;
+
+    setActionLoading(entry.id);
+    try {
+      const res = await fetch(`/api/ledger/${entry.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to delete transaction");
+        return;
+      }
+      refreshAll();
+    } catch {
+      alert("Failed to delete transaction");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const startEdit = (entry: LedgerEntry) => {
+    setEditingId(entry.id);
+    setEditForm({
+      description: entry.description,
+      amount: entry.amount.toString(),
+      type: entry.type,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ description: "", amount: "", type: "expense" });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const amount = parseFloat(editForm.amount);
+    if (!editForm.description.trim() || isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid description and amount");
+      return;
+    }
+
+    setActionLoading(editingId);
+    try {
+      const res = await fetch(`/api/ledger/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: editForm.description.trim(),
+          amount,
+          type: editForm.type,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to update transaction");
+        return;
+      }
+      setEditingId(null);
+      refreshAll();
+    } catch {
+      alert("Failed to update transaction");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     const today = new Date();
@@ -190,17 +281,80 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Account</th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Commitments</th>
                 <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Running</th>
+                <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((entry) => {
                 const allocations = entry.allocations || [];
+                const isEditing = editingId === entry.id;
+                const isLoading = actionLoading === entry.id;
+
+                if (isEditing) {
+                  return (
+                    <tr key={entry.id} className="bg-amber-50/50">
+                      <td className="px-5 py-2 text-slate-600 whitespace-nowrap">
+                        {format(parseISO(entry.date), "MMM d, yyyy")}
+                      </td>
+                      <td className="px-5 py-2">
+                        <input
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+                        />
+                      </td>
+                      <td className="px-5 py-2">
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <select
+                            value={editForm.type}
+                            onChange={(e) => setEditForm({ ...editForm, type: e.target.value as "expense" | "income" })}
+                            className="rounded border border-slate-300 px-1.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-sky-500"
+                          >
+                            <option value="expense">Spent</option>
+                            <option value="income">Income</option>
+                          </select>
+                          <input
+                            type="number"
+                            value={editForm.amount}
+                            onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                            step="0.01"
+                            className="w-24 rounded border border-slate-300 px-2 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-sky-500"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-5 py-2 text-slate-500 whitespace-nowrap">
+                        {accountMap[entry.account_id] || entry.account_id}
+                      </td>
+                      <td className="px-5 py-2 text-xs text-slate-400">--</td>
+                      <td className="px-5 py-2 text-xs text-slate-400">--</td>
+                      <td className="px-5 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={saveEdit}
+                            disabled={isLoading}
+                            className="px-3 py-1 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                          >
+                            {isLoading ? "..." : "Save"}
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            disabled={isLoading}
+                            className="px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+
                 const commitmentNames = allocations
                   .map((a) => ("commitment_name" in a ? (a as { commitment_name: string }).commitment_name : ""))
                   .filter(Boolean);
 
                 return (
-                  <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
                       {format(parseISO(entry.date), "MMM d, yyyy")}
                     </td>
@@ -247,6 +401,24 @@ export default function LedgerStatement({ accounts }: { accounts: { id: string; 
                       <span className={`text-xs font-medium ${(runningBalances.get(entry.id) ?? 0) >= 0 ? "text-slate-600" : "text-rose-600"}`}>
                         ${(runningBalances.get(entry.id) ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-right whitespace-nowrap">
+                      <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => startEdit(entry)}
+                          disabled={isLoading}
+                          className="px-2.5 py-1 text-xs font-medium text-sky-600 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(entry)}
+                          disabled={isLoading}
+                          className="px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                        >
+                          {isLoading ? "..." : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
