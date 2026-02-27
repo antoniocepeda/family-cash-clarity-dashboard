@@ -111,7 +111,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
         )}
       </div>
       <ResponsiveContainer width="100%" className="flex-1" height="100%" minHeight={280}>
-        <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }} isAnimationActive={false}>
+        <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
           <defs>
             <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
