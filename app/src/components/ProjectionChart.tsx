@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
 } from "recharts";
 import { format, parseISO } from "date-fns";
 
@@ -53,6 +54,30 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
     shortDate: format(parseISO(d.date), "M/d"),
   }));
 
+  const monthBands: { startIdx: number; endIdx: number; fill: string }[] = [];
+  let currentMonth = -1;
+  let bandStart = 0;
+  data.forEach((d, i) => {
+    const dt = parseISO(d.date);
+    const monthKey = dt.getFullYear() * 12 + dt.getMonth();
+    if (currentMonth >= 0 && monthKey !== currentMonth) {
+      monthBands.push({
+        startIdx: bandStart,
+        endIdx: i - 1,
+        fill: monthBands.length % 2 === 0 ? "#f0f9ff" : "#f5f3ff",
+      });
+      bandStart = i;
+    }
+    currentMonth = monthKey;
+  });
+  if (data.length > 0) {
+    monthBands.push({
+      startIdx: bandStart,
+      endIdx: data.length - 1,
+      fill: monthBands.length % 2 === 0 ? "#f0f9ff" : "#f5f3ff",
+    });
+  }
+
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -86,7 +111,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
         )}
       </div>
       <ResponsiveContainer width="100%" className="flex-1" height="100%" minHeight={280}>
-        <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }} isAnimationActive={false}>
           <defs>
             <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
@@ -97,6 +122,17 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
               <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
             </linearGradient>
           </defs>
+          {monthBands.map((band, i) => (
+            <ReferenceArea
+              key={i}
+              x1={data[band.startIdx]?.shortDate}
+              x2={data[band.endIdx]?.shortDate}
+              y1={yMin}
+              y2={yMax}
+              fill={band.fill}
+              fillOpacity={0.65}
+            />
+          ))}
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis
             dataKey="shortDate"
@@ -146,6 +182,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
             fill="url(#balanceGradient)"
             dot={false}
             activeDot={{ r: 5, fill: "#0ea5e9", stroke: "#fff", strokeWidth: 2 }}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>
