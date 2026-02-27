@@ -1,8 +1,29 @@
 import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, addWeeks, addMonths, format, startOfDay } from "date-fns";
 import { expandRecurrence } from "./projection";
 import { CommitmentInstance } from "./types";
+
+export function advanceByRule(base: Date, rule: string): Date {
+  if (rule.startsWith("every_")) {
+    if (rule.endsWith("_days")) {
+      const n = parseInt(rule.slice(6, -5), 10);
+      if (!isNaN(n) && n > 0) return addDays(base, n);
+    }
+    if (rule.endsWith("_weeks")) {
+      const n = parseInt(rule.slice(6, -6), 10);
+      if (!isNaN(n) && n > 0) return addWeeks(base, n);
+    }
+  }
+  switch (rule) {
+    case "weekly": return addDays(base, 7);
+    case "biweekly": return addWeeks(base, 2);
+    case "monthly": return addMonths(base, 1);
+    case "quarterly": return addMonths(base, 3);
+    case "annual": return addMonths(base, 12);
+    default: return addMonths(base, 1);
+  }
+}
 
 interface CommitmentRow {
   id: string;

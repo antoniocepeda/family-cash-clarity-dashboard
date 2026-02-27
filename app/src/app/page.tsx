@@ -7,7 +7,7 @@ import NextBills from "@/components/NextBills";
 import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
-import { Account, CommitmentWithInstances, AllocationInput, ProjectionDay, Alert } from "@/lib/types";
+import { Account, CommitmentWithInstances, AllocationInput, LedgerItemInput, ProjectionDay, Alert } from "@/lib/types";
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -92,6 +92,7 @@ export default function Dashboard() {
     type: string;
     account_id: string;
     allocations: AllocationInput[];
+    items: LedgerItemInput[];
   }) => {
     await fetch("/api/ledger", {
       method: "POST",

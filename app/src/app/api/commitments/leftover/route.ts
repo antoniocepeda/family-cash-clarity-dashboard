@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureInstance } from "@/lib/instances";
-import { addDays, addWeeks, addMonths, format, parseISO } from "date-fns";
+import { ensureInstance, advanceByRule } from "@/lib/instances";
+import { format, parseISO } from "date-fns";
 
 export async function POST(req: NextRequest) {
   const { commitment_id, instance_due_date, action } = await req.json();
@@ -54,28 +54,7 @@ export async function POST(req: NextRequest) {
     db.prepare("UPDATE commitment_instances SET status = 'funded' WHERE id = ?").run(instanceId);
 
     const base = parseISO(commitment.due_date);
-    let next: Date;
-    switch (commitment.recurrence_rule) {
-      case "weekly":
-        next = addDays(base, 7);
-        break;
-      case "biweekly":
-        next = addWeeks(base, 2);
-        break;
-      case "monthly":
-        next = addMonths(base, 1);
-        break;
-      case "quarterly":
-        next = addMonths(base, 3);
-        break;
-      case "annual":
-        next = addMonths(base, 12);
-        break;
-      default:
-        next = addMonths(base, 1);
-        break;
-    }
-
+    const next = advanceByRule(base, commitment.recurrence_rule!);
     const nextDateStr = format(next, "yyyy-MM-dd");
 
     if (action === "rollover" && leftover > 0.005) {

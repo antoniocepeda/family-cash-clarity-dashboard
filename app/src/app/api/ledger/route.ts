@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ensureInstance } from "@/lib/instances";
-import { AllocationInput } from "@/lib/types";
+import { AllocationInput, LedgerItemInput } from "@/lib/types";
 import { randomUUID } from "crypto";
 import { format } from "date-fns";
 
@@ -26,16 +26,32 @@ export async function GET() {
     allocsByLedger.set(a.ledger_id, arr);
   }
 
+  const allItems = db
+    .prepare(
+      `SELECT li.*, c.name as commitment_name
+       FROM ledger_items li
+       LEFT JOIN commitments c ON c.id = li.commitment_id`
+    )
+    .all() as { ledger_id: string; id: string; description: string; amount: number; commitment_id: string | null; instance_due_date: string | null; commitment_name: string | null }[];
+
+  const itemsByLedger = new Map<string, typeof allItems>();
+  for (const item of allItems) {
+    const arr = itemsByLedger.get(item.ledger_id) || [];
+    arr.push(item);
+    itemsByLedger.set(item.ledger_id, arr);
+  }
+
   const enriched = (entries as { id: string }[]).map((e) => ({
     ...e,
     allocations: allocsByLedger.get(e.id) || [],
+    items: itemsByLedger.get(e.id) || [],
   }));
 
   return NextResponse.json(enriched);
 }
 
 export async function POST(req: NextRequest) {
-  const { description, amount, type, account_id, allocations } = await req.json();
+  const { description, amount, type, account_id, allocations, items } = await req.json();
   if (!description || amount === undefined || !type || !account_id) {
     return NextResponse.json(
       { error: "description, amount, type, and account_id required" },
@@ -45,6 +61,7 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
   const allocs: AllocationInput[] = allocations || [];
+  const lineItems: LedgerItemInput[] = items || [];
 
   if (allocs.length > 0) {
     const allocTotal = allocs.reduce((s: number, a: AllocationInput) => s + a.amount, 0);
@@ -76,6 +93,12 @@ export async function POST(req: NextRequest) {
     db.prepare(
       "UPDATE accounts SET current_balance = current_balance + ?, updated_at = datetime('now') WHERE id = ?"
     ).run(impact, account_id);
+
+    for (const item of lineItems) {
+      db.prepare(
+        "INSERT INTO ledger_items (id, ledger_id, description, amount, commitment_id, instance_due_date) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(randomUUID(), id, item.description, item.amount, item.commitment_id || null, item.instance_due_date || null);
+    }
 
     for (const alloc of allocs) {
       const commitment = db.prepare("SELECT amount FROM commitments WHERE id = ?").get(alloc.commitment_id) as { amount: number } | undefined;

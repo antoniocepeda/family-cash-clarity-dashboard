@@ -1,5 +1,6 @@
 import { getDb } from "./db";
-import { addDays, addWeeks, addMonths, format, parseISO, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
+import { addDays, format, parseISO, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
+import { advanceByRule } from "./instances";
 
 interface CommitmentRow {
   id: string;
@@ -37,36 +38,14 @@ export function expandRecurrence(commitment: CommitmentRow, startDate: Date, end
   }
 
   let cursor = baseDate;
-  const advanceFn =
-    rule === "weekly"
-      ? (d: Date) => addDays(d, 7)
-      : rule === "biweekly"
-      ? (d: Date) => addWeeks(d, 2)
-      : rule === "monthly"
-      ? (d: Date) => addMonths(d, 1)
-      : rule === "quarterly"
-      ? (d: Date) => addMonths(d, 3)
-      : rule === "annual"
-      ? (d: Date) => addMonths(d, 12)
-      : null;
-
-  if (!advanceFn) {
-    if (
-      (isAfter(baseDate, startDate) || isEqual(baseDate, startDate)) &&
-      (isBefore(baseDate, endDate) || isEqual(baseDate, endDate))
-    ) {
-      dates.push(baseDate);
-    }
-    return dates;
-  }
 
   while (isBefore(cursor, startDate)) {
-    cursor = advanceFn(cursor);
+    cursor = advanceByRule(cursor, rule);
   }
 
   while (isBefore(cursor, endDate) || isEqual(cursor, endDate)) {
     dates.push(cursor);
-    cursor = advanceFn(cursor);
+    cursor = advanceByRule(cursor, rule);
   }
 
   return dates;
@@ -213,13 +192,13 @@ export function generateAlerts(): {
       alerts.push({
         severity: "critical",
         message: `Overdue critical bill: ${commitment.name} ($${remaining.toFixed(2)} remaining)`,
-        action_text: `Pay ${commitment.name} immediately`,
+        action_text: `Handle ${commitment.name} immediately`,
       });
     } else if (hoursUntil >= 0 && hoursUntil <= 48 && !commitment.autopay) {
       alerts.push({
         severity: "critical",
         message: `${commitment.name} ($${remaining.toFixed(2)} remaining) due within 48 hours`,
-        action_text: `Schedule payment for ${commitment.name}`,
+        action_text: `Review ${commitment.name} — due soon`,
       });
     }
   }

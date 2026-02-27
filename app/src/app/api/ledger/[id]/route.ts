@@ -140,6 +140,8 @@ export async function DELETE(
   const run = db.transaction(() => {
     reverseAllocations(db, id);
 
+    db.prepare("DELETE FROM ledger_items WHERE ledger_id = ?").run(id);
+
     const impact = existing.type === "income" ? existing.amount : -existing.amount;
     db.prepare(
       "UPDATE accounts SET current_balance = current_balance - ?, updated_at = datetime('now') WHERE id = ?"

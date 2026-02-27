@@ -45,12 +45,14 @@ export default function ManagePage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-slate-900">Manage Your Data</h1>
           <span className="text-xs text-slate-400">
-            {accounts.length} accounts &middot; {commitments.length} commitments
+            {accounts.length} accounts &middot; {commitments.length} expenses
           </span>
         </div>
 
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-          {(["accounts", "commitments", "help"] as Tab[]).map((t) => (
+          {(["accounts", "commitments", "help"] as Tab[]).map((t) => {
+            const label = t === "commitments" ? "expenses" : t;
+            return (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -65,9 +67,10 @@ export default function ManagePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
               )}
-              {t === "help" ? "Help & Guide" : t}
+              {t === "help" ? "Help & Guide" : label}
             </button>
-          ))}
+            );
+          })}
         </div>
 
         {tab === "accounts" && (
@@ -120,7 +123,7 @@ function AccountsManager({
   };
 
   const deleteAccount = async (id: string) => {
-    if (!confirm("Delete this account? Commitments linked to it will lose their account reference."))
+    if (!confirm("Delete this account? Expenses linked to it will lose their account reference."))
       return;
     await fetch(`/api/accounts?id=${id}`, { method: "DELETE" });
     onRefresh();
@@ -288,6 +291,10 @@ function CommitmentsManager({
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<Commitment>>({});
   const [adding, setAdding] = useState(false);
+  const [customValue, setCustomValue] = useState("");
+  const [customUnit, setCustomUnit] = useState<"days" | "weeks">("days");
+  const [editCustomValue, setEditCustomValue] = useState("");
+  const [editCustomUnit, setEditCustomUnit] = useState<"days" | "weeks">("days");
   const [newCmt, setNewCmt] = useState({
     name: "",
     type: "bill" as string,
@@ -299,38 +306,72 @@ function CommitmentsManager({
     account_id: "",
   });
 
+  const isCustomRule = (rule: string | null | undefined) =>
+    rule?.startsWith("every_") && (rule?.endsWith("_days") || rule?.endsWith("_weeks"));
+
+  const parseCustom = (rule: string): { value: string; unit: "days" | "weeks" } => {
+    if (rule.endsWith("_weeks")) return { value: rule.slice(6, -6), unit: "weeks" };
+    return { value: rule.slice(6, -5), unit: "days" };
+  };
+
+  const formatRecurrence = (rule: string | null) => {
+    if (!rule) return "One-time";
+    if (isCustomRule(rule)) {
+      const { value, unit } = parseCustom(rule);
+      return `Every ${value} ${unit}`;
+    }
+    return rule;
+  };
+
   const startEdit = (cmt: Commitment) => {
     setEditing(cmt.id);
     setForm({ ...cmt });
+    if (isCustomRule(cmt.recurrence_rule)) {
+      const parsed = parseCustom(cmt.recurrence_rule!);
+      setEditCustomValue(parsed.value);
+      setEditCustomUnit(parsed.unit);
+    } else {
+      setEditCustomValue("");
+      setEditCustomUnit("days");
+    }
   };
 
   const saveEdit = async () => {
     if (!form.id) return;
+    const effectiveRule = (form.recurrence_rule === "custom" || isCustomRule(form.recurrence_rule)) && editCustomValue
+      ? `every_${editCustomValue}_${editCustomUnit}`
+      : form.recurrence_rule;
     await fetch("/api/commitments", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, recurrence_rule: effectiveRule }),
     });
     setEditing(null);
     onRefresh();
   };
 
   const deleteCommitment = async (id: string) => {
-    if (!confirm("Delete this commitment permanently?")) return;
+    if (!confirm("Delete this expense permanently?")) return;
     await fetch(`/api/commitments?id=${id}`, { method: "DELETE" });
     onRefresh();
   };
 
   const addCommitment = async () => {
+    const effectiveRule = newCmt.recurrence_rule === "custom" && customValue
+      ? `every_${customValue}_${customUnit}`
+      : newCmt.recurrence_rule;
     await fetch("/api/commitments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...newCmt,
+        recurrence_rule: effectiveRule,
         amount: parseFloat(newCmt.amount) || 0,
       }),
     });
     setAdding(false);
+    setCustomValue("");
+    setCustomUnit("days");
     setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", priority: "normal", autopay: false, account_id: "" });
     onRefresh();
   };
@@ -340,16 +381,16 @@ function CommitmentsManager({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">Bills &amp; Income Commitments</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Bills &amp; Income</h2>
         <button onClick={() => setAdding(!adding)} className="text-sm font-medium text-sky-600 hover:text-sky-800 transition-colors">
-          {adding ? "Cancel" : "+ Add Commitment"}
+          {adding ? "Cancel" : "+ Add Expense"}
         </button>
       </div>
 
       {adding && (
         <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input value={newCmt.name} onChange={(e) => setNewCmt({ ...newCmt, name: e.target.value })} placeholder="Commitment name" className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" />
+            <input value={newCmt.name} onChange={(e) => setNewCmt({ ...newCmt, name: e.target.value })} placeholder="Expense name" className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" />
             <select value={newCmt.type} onChange={(e) => setNewCmt({ ...newCmt, type: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
               <option value="bill">Bill / Expense</option>
               <option value="income">Income</option>
@@ -365,6 +406,7 @@ function CommitmentsManager({
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="annual">Annual</option>
+              <option value="custom">Custom (every N days)</option>
             </select>
             <select value={newCmt.priority} onChange={(e) => setNewCmt({ ...newCmt, priority: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
               <option value="critical">Critical</option>
@@ -376,13 +418,25 @@ function CommitmentsManager({
               {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
             </select>
           </div>
+          {newCmt.recurrence_rule === "custom" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Every how many?</label>
+              <div className="flex gap-2">
+                <input type="number" value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="e.g., 6" min="1" step="1" className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" />
+                <select value={customUnit} onChange={(e) => setCustomUnit(e.target.value as "days" | "weeks")} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="days">Days</option>
+                  <option value="weeks">Weeks</option>
+                </select>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-1.5 text-sm text-slate-600">
               <input type="checkbox" checked={newCmt.autopay} onChange={(e) => setNewCmt({ ...newCmt, autopay: e.target.checked })} className="rounded border-slate-300" />
               Autopay
             </label>
-            <button onClick={addCommitment} disabled={!newCmt.name || !newCmt.amount} className="px-4 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 transition-colors">
-              Add Commitment
+            <button onClick={addCommitment} disabled={!newCmt.name || !newCmt.amount || (newCmt.recurrence_rule === "custom" && !customValue)} className="px-4 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 transition-colors">
+              Add Expense
             </button>
           </div>
         </div>
@@ -411,7 +465,20 @@ function CommitmentsManager({
                     <td className="px-4 py-2"><select value={form.type || "bill"} onChange={(e) => setForm({ ...form, type: e.target.value as "income" | "bill" })} className="rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"><option value="bill">Bill</option><option value="income">Income</option></select></td>
                     <td className="px-4 py-2"><input type="number" value={form.amount ?? 0} onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) })} step="0.01" className="w-24 rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500" /></td>
                     <td className="px-4 py-2"><input type="date" value={form.due_date || ""} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500" /></td>
-                    <td className="px-4 py-2"><select value={form.recurrence_rule || ""} onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value || null })} className="rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"><option value="">One-time</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></td>
+                    <td className="px-4 py-2">
+                      <select value={isCustomRule(form.recurrence_rule) ? "custom" : (form.recurrence_rule || "")} onChange={(e) => { const v = e.target.value; setForm({ ...form, recurrence_rule: v === "custom" ? "custom" : (v || null) }); if (v !== "custom") { setEditCustomValue(""); setEditCustomUnit("days"); } }} className="rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500">
+                        <option value="">One-time</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option><option value="custom">Custom</option>
+                      </select>
+                      {(form.recurrence_rule === "custom" || isCustomRule(form.recurrence_rule)) && (
+                        <div className="flex gap-1 mt-1">
+                          <input type="number" value={editCustomValue} onChange={(e) => setEditCustomValue(e.target.value)} placeholder="#" min="1" step="1" className="w-16 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-sky-500" />
+                          <select value={editCustomUnit} onChange={(e) => setEditCustomUnit(e.target.value as "days" | "weeks")} className="rounded border border-slate-300 px-1 py-1 text-xs outline-none focus:ring-2 focus:ring-sky-500">
+                            <option value="days">days</option>
+                            <option value="weeks">wks</option>
+                          </select>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2"><select value={form.priority || "normal"} onChange={(e) => setForm({ ...form, priority: e.target.value as Commitment["priority"] })} className="rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"><option value="critical">Critical</option><option value="normal">Normal</option><option value="flexible">Flexible</option></select></td>
                     <td className="px-4 py-2"><input type="checkbox" checked={!!form.autopay} onChange={(e) => setForm({ ...form, autopay: e.target.checked ? 1 : 0 })} className="rounded border-slate-300" /></td>
                     <td className="px-4 py-2 text-right">
@@ -433,7 +500,7 @@ function CommitmentsManager({
                     <td className="px-4 py-3 capitalize text-slate-600">{cmt.type}</td>
                     <td className="px-4 py-3 font-semibold tabular-nums text-slate-800">{cmt.type === "income" ? "+" : "−"}${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                     <td className="px-4 py-3 text-slate-600">{cmt.due_date}</td>
-                    <td className="px-4 py-3 capitalize text-slate-500">{cmt.recurrence_rule || "One-time"}</td>
+                    <td className="px-4 py-3 capitalize text-slate-500">{formatRecurrence(cmt.recurrence_rule)}</td>
                     <td className="px-4 py-3">
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${cmt.priority === "critical" ? "bg-red-100 text-red-700" : cmt.priority === "flexible" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-600"}`}>{cmt.priority}</span>
                     </td>
@@ -448,7 +515,7 @@ function CommitmentsManager({
                 )
               )}
               {commitments.length === 0 && (
-                <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">No commitments yet. Add your first bill or income above.</td></tr>
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">No expenses yet. Add your first bill or income above.</td></tr>
               )}
             </tbody>
           </table>
@@ -492,7 +559,7 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 space-y-2">
           <p className="text-sm font-medium text-red-800">Clear all data &amp; start fresh</p>
-          <p className="text-xs text-red-600/70">Type <strong>RESET</strong> to confirm. This deletes all accounts, commitments, and alerts.</p>
+          <p className="text-xs text-red-600/70">Type <strong>RESET</strong> to confirm. This deletes all accounts, expenses, and alerts.</p>
           <div className="flex items-center gap-2">
             <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder='Type "RESET"' className="rounded-lg border border-red-300 px-3 py-2 text-sm w-36 outline-none focus:ring-2 focus:ring-red-500" />
             <button onClick={handleReset} disabled={confirmText !== "RESET"} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Clear Everything</button>
@@ -527,7 +594,7 @@ function HelpGuide() {
       <h2 className="text-xl font-bold">Welcome to Cash Clarity</h2>
       <p className="mt-1 text-sky-100 text-sm leading-relaxed max-w-2xl">
         This dashboard helps your family see exactly where your cash stands — not just today,
-        but 28 days out. No guessing, no surprises. Check the Commitments tab to manage your
+        but 28 days out. No guessing, no surprises. Check the Expenses tab to manage your
         bills and income, or visit the Dashboard for a full overview.
       </p>
     </div>

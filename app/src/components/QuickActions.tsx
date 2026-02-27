@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Account, AllocationInput, CommitmentInstance } from "@/lib/types";
+import { Account, AllocationInput, LedgerItemInput, CommitmentInstance } from "@/lib/types";
 
 interface Props {
   accounts: Account[];
@@ -23,6 +23,7 @@ interface Props {
     type: string;
     account_id: string;
     allocations: AllocationInput[];
+    items: LedgerItemInput[];
   }) => void;
 }
 
@@ -154,6 +155,10 @@ function CommitmentModal({
     autopay: false,
     account_id: accounts[0]?.id || "",
   });
+  const [customValue, setCustomValue] = useState("");
+  const [customUnit, setCustomUnit] = useState<"days" | "weeks">("days");
+  const isCustom = form.recurrence_rule === "custom";
+  const effectiveRule = isCustom && customValue ? `every_${customValue}_${customUnit}` : form.recurrence_rule;
 
   return (
     <Overlay onClose={onClose}>
@@ -193,22 +198,44 @@ function CommitmentModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Recurrence</label>
-            <select value={form.recurrence_rule} onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+            <select value={isCustom ? "custom" : form.recurrence_rule} onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               <option value="">One-time</option>
               <option value="weekly">Weekly</option>
               <option value="biweekly">Biweekly</option>
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="annual">Annual</option>
+              <option value="custom">Custom (every N days)</option>
             </select>
           </div>
+          {isCustom ? (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Every how many?</label>
+              <div className="flex gap-2">
+                <input type="number" value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="e.g., 6" min="1" step="1" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+                <select value={customUnit} onChange={(e) => setCustomUnit(e.target.value as "days" | "weeks")} className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                  <option value="days">Days</option>
+                  <option value="weeks">Weeks</option>
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
+              <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+              </select>
+            </div>
+          )}
+        </div>
+        {isCustom && (
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
             <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
             </select>
           </div>
-        </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={form.autopay} onChange={(e) => setForm({ ...form, autopay: e.target.checked })} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
           Autopay enabled
@@ -216,7 +243,7 @@ function CommitmentModal({
       </div>
       <div className="flex justify-end gap-3 mt-5">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
-        <button onClick={() => onSubmit({ ...form, amount: parseFloat(form.amount) || 0 })} disabled={!form.name || !form.amount} className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        <button onClick={() => onSubmit({ ...form, recurrence_rule: effectiveRule, amount: parseFloat(form.amount) || 0 })} disabled={!form.name || !form.amount || (isCustom && !customValue)} className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           Add {form.type === "income" ? "Income" : "Bill"}
         </button>
       </div>
@@ -328,6 +355,7 @@ function TransactionWizard({
     type: string;
     account_id: string;
     allocations: AllocationInput[];
+    items: LedgerItemInput[];
   }) => void;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -408,10 +436,25 @@ function TransactionWizard({
     }));
   };
 
+  const buildItems = (): LedgerItemInput[] => {
+    return items
+      .filter((i) => i.description && (parseFloat(i.amount) || 0) > 0)
+      .map((i) => {
+        const parts = i.instanceKey ? i.instanceKey.split("|") : [];
+        return {
+          description: i.description,
+          amount: parseFloat(i.amount) || 0,
+          commitment_id: parts[0] || undefined,
+          instance_due_date: parts[1] || undefined,
+        };
+      });
+  };
+
   const handleSubmit = () => {
     const allocations = buildAllocations();
     const allocTotal = allocations.reduce((s, a) => s + a.amount, 0);
     const hasAllocations = allocations.length > 0;
+    const lineItems = buildItems();
 
     if (hasAllocations && Math.abs(allocTotal - totalAmount) > 0.005) {
       onSubmit({
@@ -420,6 +463,7 @@ function TransactionWizard({
         type,
         account_id: accountId,
         allocations: [],
+        items: lineItems,
       });
     } else {
       onSubmit({
@@ -428,6 +472,7 @@ function TransactionWizard({
         type,
         account_id: accountId,
         allocations,
+        items: lineItems,
       });
     }
   };
@@ -540,7 +585,7 @@ function TransactionWizard({
                         onChange={(e) => updateItem(item.key, "instanceKey", e.target.value)}
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
                       >
-                        <option value="">No commitment</option>
+                        <option value="">No expense</option>
                         {!loadingInstances && eligibleInstances.map((inst) => {
                           const key = `${inst.commitment_id}|${inst.due_date}`;
                           return (

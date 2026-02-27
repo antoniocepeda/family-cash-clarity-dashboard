@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { LedgerEntry } from "@/lib/types";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { LedgerEntry, LedgerItem } from "@/lib/types";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, isWithinInterval } from "date-fns";
 
 type DateFilter = "all" | "this_week" | "this_month" | "last_month" | "custom";
@@ -32,6 +32,7 @@ export default function LedgerStatement({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ description: "", amount: "", type: "expense" });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const accountMap = useMemo<AccountMap>(() => {
     const map: AccountMap = {};
@@ -59,7 +60,7 @@ export default function LedgerStatement({
   }, [fetchEntries, onRefresh]);
 
   const handleDelete = async (entry: LedgerEntry) => {
-    if (!confirm(`Delete "${entry.description}" for $${entry.amount.toFixed(2)}? This will reverse the account balance and any commitment allocations.`))
+    if (!confirm(`Delete "${entry.description}" for $${entry.amount.toFixed(2)}? This will reverse the account balance and any expense allocations.`))
       return;
 
     setActionLoading(entry.id);
@@ -248,7 +249,7 @@ export default function LedgerStatement({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by description or commitment..."
+            placeholder="Search by description or expense..."
             className="w-full sm:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
           />
         </div>
@@ -279,7 +280,7 @@ export default function LedgerStatement({
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
                 <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
                 <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Account</th>
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Commitments</th>
+                <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Linked Expenses</th>
                 <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Running</th>
                 <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -287,8 +288,21 @@ export default function LedgerStatement({
             <tbody className="divide-y divide-slate-100">
               {filtered.map((entry) => {
                 const allocations = entry.allocations || [];
+                const items: LedgerItem[] = entry.items || [];
                 const isEditing = editingId === entry.id;
                 const isLoading = actionLoading === entry.id;
+                const hasMultipleItems = items.length > 1;
+                const isExpanded = expandedIds.has(entry.id);
+                const isBillPayment = !!entry.commitment_id;
+
+                const toggleExpand = () => {
+                  setExpandedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(entry.id)) next.delete(entry.id);
+                    else next.add(entry.id);
+                    return next;
+                  });
+                };
 
                 if (isEditing) {
                   return (
@@ -353,74 +367,132 @@ export default function LedgerStatement({
                   .map((a) => ("commitment_name" in a ? (a as { commitment_name: string }).commitment_name : ""))
                   .filter(Boolean);
 
+                const singleItemDesc = items.length === 1 ? items[0].description : null;
+
                 return (
-                  <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
-                      {format(parseISO(entry.date), "MMM d, yyyy")}
-                    </td>
-                    <td className="px-5 py-3">
-                      <div>
-                        <span className="font-medium text-slate-800">{entry.description}</span>
-                        {allocations.length > 0 && allocations.some((a) => a.note) && (
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {allocations.map((a) => a.note).filter(Boolean).join(", ")}
-                          </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap">
-                      <span className={`font-semibold ${entry.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
-                        {entry.type === "income" ? "+" : "-"}$
-                        {entry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
-                      {accountMap[entry.account_id] || entry.account_id}
-                    </td>
-                    <td className="px-5 py-3">
-                      {commitmentNames.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {allocations.map((a, i) => {
-                            const name = "commitment_name" in a ? (a as { commitment_name: string }).commitment_name : "";
-                            if (!name) return null;
-                            return (
-                              <span
-                                key={i}
-                                className="inline-flex text-[10px] font-medium bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full"
+                  <React.Fragment key={entry.id}>
+                    <tr className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-5 py-3 text-slate-600 whitespace-nowrap">
+                        {format(parseISO(entry.date), "MMM d, yyyy")}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-start gap-1.5">
+                          {hasMultipleItems && (
+                            <button
+                              onClick={toggleExpand}
+                              className="mt-0.5 shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+                              title={isExpanded ? "Collapse items" : "Expand items"}
+                            >
+                              <svg
+                                className={`h-4 w-4 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
                               >
-                                {name} (${a.amount.toFixed(2)})
-                              </span>
-                            );
-                          })}
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-medium text-slate-800">{entry.description}</span>
+                              {isBillPayment && (
+                                <span className="inline-flex text-[10px] font-semibold bg-sky-50 text-sky-600 px-1.5 py-0.5 rounded">
+                                  Bill Payment
+                                </span>
+                              )}
+                              {hasMultipleItems && (
+                                <span className="text-[10px] font-medium text-slate-400">
+                                  {items.length} items
+                                </span>
+                              )}
+                            </div>
+                            {singleItemDesc && singleItemDesc !== entry.description && (
+                              <p className="text-xs text-slate-400 mt-0.5">{singleItemDesc}</p>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <span className="text-xs text-slate-300">--</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap">
-                      <span className={`text-xs font-medium ${(runningBalances.get(entry.id) ?? 0) >= 0 ? "text-slate-600" : "text-rose-600"}`}>
-                        ${(runningBalances.get(entry.id) ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap">
-                      <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => startEdit(entry)}
-                          disabled={isLoading}
-                          className="px-2.5 py-1 text-xs font-medium text-sky-600 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(entry)}
-                          disabled={isLoading}
-                          className="px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                        >
-                          {isLoading ? "..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <span className={`font-semibold ${entry.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                          {entry.type === "income" ? "+" : "-"}$
+                          {entry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
+                        {accountMap[entry.account_id] || entry.account_id}
+                      </td>
+                      <td className="px-5 py-3">
+                        {commitmentNames.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {allocations.map((a, i) => {
+                              const name = "commitment_name" in a ? (a as { commitment_name: string }).commitment_name : "";
+                              if (!name) return null;
+                              return (
+                                <span
+                                  key={i}
+                                  className="inline-flex text-[10px] font-medium bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full"
+                                >
+                                  {name} (${a.amount.toFixed(2)})
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-300">--</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <span className={`text-xs font-medium ${(runningBalances.get(entry.id) ?? 0) >= 0 ? "text-slate-600" : "text-rose-600"}`}>
+                          ${(runningBalances.get(entry.id) ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => startEdit(entry)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1 text-xs font-medium text-sky-600 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            {isLoading ? "..." : "Delete"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {hasMultipleItems && isExpanded && items.map((item) => (
+                      <tr key={item.id} className="bg-slate-50/30">
+                        <td className="px-5 py-2" />
+                        <td className="px-5 py-2 pl-12">
+                          <span className="text-xs text-slate-600">{item.description}</span>
+                        </td>
+                        <td className="px-5 py-2 text-right whitespace-nowrap">
+                          <span className="text-xs text-slate-500">
+                            ${item.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </span>
+                        </td>
+                        <td className="px-5 py-2" />
+                        <td className="px-5 py-2">
+                          {item.commitment_name ? (
+                            <span className="inline-flex text-[10px] font-medium bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full">
+                              {item.commitment_name}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-300">--</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-2" />
+                        <td className="px-5 py-2" />
+                      </tr>
+                    ))}
+                  </React.Fragment>
                 );
               })}
             </tbody>

@@ -33,6 +33,23 @@ export interface CommitmentHistory {
   due_date: string;
 }
 
+export interface LedgerItem {
+  id: string;
+  ledger_id: string;
+  description: string;
+  amount: number;
+  commitment_id: string | null;
+  instance_due_date: string | null;
+  commitment_name?: string;
+}
+
+export interface LedgerItemInput {
+  description: string;
+  amount: number;
+  commitment_id?: string;
+  instance_due_date?: string;
+}
+
 export interface LedgerEntry {
   id: string;
   date: string;
@@ -43,6 +60,7 @@ export interface LedgerEntry {
   commitment_id: string | null;
   created_at: string;
   allocations?: CommitmentAllocation[];
+  items?: LedgerItem[];
 }
 
 export interface CommitmentInstance {

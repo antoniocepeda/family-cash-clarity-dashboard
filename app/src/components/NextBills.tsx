@@ -13,16 +13,29 @@ export default function NextBills({ commitments }: Props) {
   sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
   const cutoff = sevenDaysOut.toISOString().slice(0, 10);
 
+  const getRemaining = (c: CommitmentWithInstances) => {
+    const inst = c.instances?.find((i) => i.due_date === c.due_date);
+    const planned = inst?.planned_amount ?? c.amount;
+    const allocated = inst?.allocated_amount ?? 0;
+    return planned - allocated;
+  };
+
+  const isFunded = (c: CommitmentWithInstances) => {
+    const inst = c.instances?.find((i) => i.due_date === c.due_date);
+    if (inst?.status === "funded") return true;
+    return getRemaining(c) <= 0.005;
+  };
+
   const bills = commitments
-    .filter((c) => c.active && !c.paid && c.type === "bill" && c.due_date <= cutoff)
+    .filter((c) => c.active && !c.paid && c.type === "bill" && c.due_date <= cutoff && !isFunded(c))
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   const income = commitments
-    .filter((c) => c.active && !c.paid && c.type === "income" && c.due_date <= cutoff)
+    .filter((c) => c.active && !c.paid && c.type === "income" && c.due_date <= cutoff && !isFunded(c))
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
-  const totalBillsDue = bills.reduce((sum, c) => sum + c.amount, 0);
-  const totalIncome = income.reduce((sum, c) => sum + c.amount, 0);
+  const totalBillsDue = bills.reduce((sum, c) => sum + getRemaining(c), 0);
+  const totalIncome = income.reduce((sum, c) => sum + getRemaining(c), 0);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm h-full flex flex-col">
@@ -38,11 +51,12 @@ export default function NextBills({ commitments }: Props) {
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 max-h-[460px] overflow-y-auto">
         {[...bills, ...income]
           .sort((a, b) => a.due_date.localeCompare(b.due_date))
           .map((item) => {
             const daysUntil = differenceInDays(parseISO(item.due_date), today);
+            const remaining = getRemaining(item);
             return (
               <div
                 key={item.id}
@@ -72,7 +86,7 @@ export default function NextBills({ commitments }: Props) {
                   }`}
                 >
                   {item.type === "income" ? "+" : "−"}$
-                  {item.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  {remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                 </span>
               </div>
             );
@@ -80,7 +94,7 @@ export default function NextBills({ commitments }: Props) {
 
         {bills.length === 0 && income.length === 0 && (
           <p className="text-center text-sm text-slate-400 py-4">
-            No commitments in the next 7 days
+            No expenses in the next 7 days
           </p>
         )}
       </div>

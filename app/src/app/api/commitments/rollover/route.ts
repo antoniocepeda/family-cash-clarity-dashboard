@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ensureInstance } from "@/lib/instances";
-import { addDays, addWeeks, addMonths, format, parseISO } from "date-fns";
+import { ensureInstance, advanceByRule } from "@/lib/instances";
+import { format, parseISO } from "date-fns";
 
 export async function POST(req: NextRequest) {
   const { id, instance_due_date } = await req.json();
@@ -34,27 +34,7 @@ export async function POST(req: NextRequest) {
 
     if (commitment.recurrence_rule) {
       const base = parseISO(commitment.due_date);
-      let next: Date;
-      switch (commitment.recurrence_rule) {
-        case "weekly":
-          next = addDays(base, 7);
-          break;
-        case "biweekly":
-          next = addWeeks(base, 2);
-          break;
-        case "monthly":
-          next = addMonths(base, 1);
-          break;
-        case "quarterly":
-          next = addMonths(base, 3);
-          break;
-        case "annual":
-          next = addMonths(base, 12);
-          break;
-        default:
-          next = addMonths(base, 1);
-          break;
-      }
+      const next = advanceByRule(base, commitment.recurrence_rule);
       db.prepare(
         "UPDATE commitments SET due_date = ?, paid = 0, actual_amount = NULL, paid_date = NULL WHERE id = ?"
       ).run(format(next, "yyyy-MM-dd"), id);

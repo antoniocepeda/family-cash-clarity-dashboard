@@ -5,7 +5,7 @@ import Nav from "@/components/Nav";
 import UpcomingCommitments from "@/components/UpcomingCommitments";
 import { CommitmentWithInstances } from "@/lib/types";
 
-export default function CommitmentsPage() {
+export default function ExpensesPage() {
   const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [loading, setLoading] = useState(true);
   const [simulatedIds, setSimulatedIds] = useState<Set<string>>(new Set());
@@ -13,10 +13,10 @@ export default function CommitmentsPage() {
   const fetchCommitments = useCallback(async () => {
     try {
       const res = await fetch("/api/commitments");
-      const data = await res.json();
-      setCommitments(data);
+      const cmts = await res.json();
+      setCommitments(cmts);
     } catch (err) {
-      console.error("Failed to fetch commitments:", err);
+      console.error("Failed to fetch expenses:", err);
     } finally {
       setLoading(false);
     }
@@ -25,15 +25,6 @@ export default function CommitmentsPage() {
   useEffect(() => {
     fetchCommitments();
   }, [fetchCommitments]);
-
-  const handleMarkPaid = async (id: string, actualAmount: number, instanceDueDate: string, note?: string) => {
-    await fetch("/api/commitments/mark-paid", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, actual_amount: actualAmount, instance_due_date: instanceDueDate, note }),
-    });
-    fetchCommitments();
-  };
 
   const handleRollover = async (id: string, instanceDueDate: string) => {
     await fetch("/api/commitments/rollover", {
@@ -78,7 +69,7 @@ export default function CommitmentsPage() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
-            <p className="mt-4 text-sm text-slate-500 font-medium">Loading commitments...</p>
+            <p className="mt-4 text-sm text-slate-500 font-medium">Loading expenses...</p>
           </div>
         </div>
       </>
@@ -91,7 +82,6 @@ export default function CommitmentsPage() {
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1">
         <UpcomingCommitments
           commitments={commitments}
-          onMarkPaid={handleMarkPaid}
           onRollover={handleRollover}
           onEditInstanceAmount={handleEditInstanceAmount}
           onLeftover={handleLeftover}

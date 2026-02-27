@@ -115,6 +115,20 @@ function migrate(db: Database.Database) {
   if (!allocCols.some((c) => c.name === "note")) {
     db.exec("ALTER TABLE commitment_allocations ADD COLUMN note TEXT");
   }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ledger_items (
+      id TEXT PRIMARY KEY,
+      ledger_id TEXT NOT NULL,
+      description TEXT NOT NULL,
+      amount REAL NOT NULL,
+      commitment_id TEXT,
+      instance_due_date TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (ledger_id) REFERENCES ledger(id) ON DELETE CASCADE,
+      FOREIGN KEY (commitment_id) REFERENCES commitments(id)
+    )
+  `);
 }
 
 function initSchema(db: Database.Database) {
