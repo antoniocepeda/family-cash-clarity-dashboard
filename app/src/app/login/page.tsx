@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, Suspense, useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 
@@ -22,6 +22,9 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   const next = searchParams.get("next") || "/";
+  const redirectAfterSignIn = () => {
+    router.replace(next.startsWith("/") ? next : "/");
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -30,9 +33,25 @@ function LoginForm() {
 
     try {
       await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-      router.replace(next.startsWith("/") ? next : "/");
+      redirectAfterSignIn();
     } catch {
       setError("Unable to sign in with that email and password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setLoading(true);
+
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(getFirebaseAuth(), provider);
+      redirectAfterSignIn();
+    } catch {
+      setError("Unable to sign in with Google. Check that Google is enabled in Firebase Authentication.");
     } finally {
       setLoading(false);
     }
@@ -41,6 +60,24 @@ function LoginForm() {
   return (
     <LoginShell>
       <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <button
+          type="button"
+          onClick={() => void handleGoogleSignIn()}
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-sm font-bold text-blue-600">
+            G
+          </span>
+          Continue with Google
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-400">or</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-slate-700">
             Email
