@@ -1,15 +1,8 @@
 # Firebase App Hosting configuration for the Next.js app in this directory.
 # The App Hosting backend should use "app" as the repo-relative root directory.
 runConfig:
-  # Keep SQLite state on one Cloud Run instance. This is still ephemeral on App Hosting.
-  maxInstances: 1
+  maxInstances: 10
   minInstances: 0
   cpu: 1
   memoryMiB: 512
   concurrency: 80
-
-env:
-  - variable: FAMILY_CASH_DB_PATH
-    value: /tmp/family-cash.db
-    availability:
-      - RUNTIME

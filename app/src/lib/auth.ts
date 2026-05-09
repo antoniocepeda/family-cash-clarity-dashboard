@@ -27,7 +27,7 @@ export async function verifyAuthToken(req: NextRequest): Promise<DecodedIdToken 
 }
 
 export function withAuth<Context extends object = object>(handler: AuthedHandler<Context>) {
-  return async function authedRoute(req: NextRequest, context = {} as Context) {
+  return async function authedRoute(req: NextRequest, context?: Context) {
     const user = await verifyAuthToken(req);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,6 +36,6 @@ export function withAuth<Context extends object = object>(handler: AuthedHandler
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    return handler(req, { ...context, user });
+    return handler(req, { ...(context ?? ({} as Context)), user });
   };
 }

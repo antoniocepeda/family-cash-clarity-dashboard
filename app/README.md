@@ -1,11 +1,12 @@
 # Family Cash Clarity Dashboard
 
-A local-first Next.js dashboard for tracking household cash position, bills, income, upcoming commitments, and short-term balance projections.
+A Next.js dashboard for tracking household cash position, bills, income, upcoming commitments, and short-term balance projections.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
+- A Firebase project with Authentication and Firestore enabled
 
 ## Setup
 
@@ -20,6 +21,8 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 The Next.js app is nested in the `app/` directory. Running `npm run dev` from the repository root will fail because the root folder does not contain `package.json`.
+
+Copy `.env.local.example` to `.env.local` and fill in the browser Firebase config plus server-side Firebase Admin credentials for local development. Do not prefix Admin credentials or Plaid secrets with `NEXT_PUBLIC_`.
 
 ## Useful Commands
 
@@ -57,32 +60,48 @@ firebase apphosting:backends:create --project <firebase-project-id>
 
 When prompted for the app root directory, enter `app`.
 
-## Local Data
+## Firestore Data
 
-The app uses SQLite through `better-sqlite3`. By default, the database is created at:
+The app stores data in Firestore using Firebase Admin from server-only API routes. Runtime filesystem storage is not used as the source of truth, so the app can run across Firebase App Hosting/Cloud Run instances.
+
+Documents are scoped under the authenticated Firebase user:
 
 ```text
-app/data/family-cash.db
+users/{userId}
+users/{userId}/accounts/{accountId}
+users/{userId}/commitments/{commitmentId}
+users/{userId}/commitmentInstances/{instanceId}
+users/{userId}/ledger/{ledgerId}
+users/{userId}/commitmentAllocations/{allocationId}
+users/{userId}/ledgerItems/{itemId}
+users/{userId}/plaidItems/{itemId}
+users/{userId}/plaidAccounts/{plaidAccountId}
+users/{userId}/plaidSync/{itemId}
 ```
 
-Set `FAMILY_CASH_DB_PATH` to override the database file path.
+Each persisted document includes stable `createdAt` and `updatedAt` fields. Existing API responses keep the app's snake_case fields for UI compatibility.
 
-Files under `app/data/*.db*` are ignored by Git because they are local runtime data. Back up that folder before resetting data or moving to another machine.
+Deploy `firestore.rules` to enforce `request.auth.uid == userId` document scoping for any direct client Firestore access. The current app primarily accesses Firestore through authenticated server API routes.
 
-On Firebase App Hosting, `app/apphosting.yaml` sets `FAMILY_CASH_DB_PATH` to `/tmp/family-cash.db`. That keeps the current SQLite API routes runnable on Cloud Run, but Cloud Run instance storage is ephemeral and not shared across instances or rollouts. Use Firestore, Cloud SQL, or another durable store before treating the hosted deployment as production household data.
+For local Admin access, either use Application Default Credentials:
+
+```bash
+gcloud auth application-default login
+```
+
+or set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` in `.env.local`.
 
 ## Project Layout
 
 ```text
 src/app/           Next.js pages and API routes
 src/components/    Dashboard UI components
-src/lib/           SQLite setup, projection logic, recurrence helpers, shared types
-data/              Local SQLite database files
+src/lib/           Firestore repositories, projection logic, recurrence helpers, shared types
 KB.md              User guide and product knowledge base
 ```
 
 ## Notes
 
-- The dashboard is intended for local use unless authentication and deployment hardening are added.
+- The dashboard requires Firebase Authentication; server routes also check the authorized user email list.
 - Projection and alert accuracy depends on keeping account balances reconciled and commitments up to date.
 - The app uses system fonts so builds do not depend on downloading Google-hosted fonts.

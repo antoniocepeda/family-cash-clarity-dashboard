@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { generateProjection } from "@/lib/projection";
+import type { DecodedIdToken } from "firebase-admin/auth";
 
-async function handleGET(req: NextRequest) {
+async function handleGET(req: NextRequest, { user }: { user: DecodedIdToken }) {
   const { searchParams } = new URL(req.url);
   const days = parseInt(searchParams.get("days") || "28", 10);
-  const simulateEarly = searchParams.get("simulate_early");
-  const simulateEarlyIds = simulateEarly ? simulateEarly.split(",").filter(Boolean) : [];
-  const projection = generateProjection(days, simulateEarlyIds);
-  return NextResponse.json(projection);
+  const simulateEarlyIds = searchParams.get("simulate_early")?.split(",").filter(Boolean) ?? [];
+  return NextResponse.json(await generateProjection(user.uid, days, simulateEarlyIds));
 }
 
 export const GET = withAuth(handleGET);

@@ -1,0 +1,572 @@
+import "server-only";
+
+import { randomUUID } from "crypto";
+import { FieldValue } from "firebase-admin/firestore";
+import { format } from "date-fns";
+import { getFirebaseAdminFirestore } from "@/lib/firebase-admin";
+import {
+  Account,
+  AllocationInput,
+  Commitment,
+  CommitmentAllocation,
+  CommitmentInstance,
+  LedgerEntry,
+  LedgerItem,
+  LedgerItemInput,
+} from "@/lib/types";
+
+export const COLLECTIONS = {
+  accounts: "accounts",
+  commitments: "commitments",
+  commitmentInstances: "commitmentInstances",
+  ledger: "ledger",
+  commitmentAllocations: "commitmentAllocations",
+  ledgerItems: "ledgerItems",
+  plaidItems: "plaidItems",
+  plaidAccounts: "plaidAccounts",
+  plaidSync: "plaidSync",
+} as const;
+
+export function userRef(userId: string) {
+  return getFirebaseAdminFirestore().collection("users").doc(userId);
+}
+
+function collection(userId: string, name: string) {
+  return userRef(userId).collection(name);
+}
+
+function stampCreate(userId: string) {
+  const now = new Date().toISOString();
+  return { ownerId: userId, createdAt: now, updatedAt: now, created_at: now, updated_at: now };
+}
+
+function stampUpdate() {
+  const now = new Date().toISOString();
+  return { updatedAt: now, updated_at: now };
+}
+
+function row<T>(id: string, data: FirebaseFirestore.DocumentData): T {
+  return { id, ...data } as unknown as T;
+}
+
+function isTruthyNumber(value: unknown, fallback = 0) {
+  if (typeof value === "number") return value ? 1 : 0;
+  return value ? 1 : fallback;
+}
+
+function normalizeAccount(id: string, data: FirebaseFirestore.DocumentData): Account {
+  return {
+    id,
+    name: String(data.name ?? ""),
+    type: (data.type ?? "checking") as Account["type"],
+    current_balance: Number(data.current_balance ?? data.currentBalance ?? 0),
+    is_reserve: isTruthyNumber(data.is_reserve ?? data.isReserve),
+    updated_at: String(data.updated_at ?? data.updatedAt ?? new Date().toISOString()),
+  };
+}
+
+function normalizeCommitment(id: string, data: FirebaseFirestore.DocumentData): Commitment {
+  return {
+    id,
+    name: String(data.name ?? ""),
+    type: (data.type ?? "bill") as Commitment["type"],
+    amount: Number(data.amount ?? 0),
+    actual_amount: data.actual_amount === undefined ? null : Number(data.actual_amount),
+    due_date: String(data.due_date ?? data.dueDate ?? ""),
+    recurrence_rule: (data.recurrence_rule ?? data.recurrenceRule ?? null) as string | null,
+    priority: (data.priority ?? "normal") as Commitment["priority"],
+    autopay: isTruthyNumber(data.autopay),
+    account_id: (data.account_id ?? data.accountId ?? null) as string | null,
+    active: isTruthyNumber(data.active, 1),
+    paid: isTruthyNumber(data.paid),
+    paid_date: (data.paid_date ?? data.paidDate ?? null) as string | null,
+    created_at: String(data.created_at ?? data.createdAt ?? new Date().toISOString()),
+  };
+}
+
+function normalizeInstance(id: string, data: FirebaseFirestore.DocumentData): CommitmentInstance {
+  const planned = Number(data.planned_amount ?? data.plannedAmount ?? 0);
+  const allocated = Number(data.allocated_amount ?? data.allocatedAmount ?? 0);
+  return {
+    id,
+    commitment_id: String(data.commitment_id ?? data.commitmentId ?? ""),
+    due_date: String(data.due_date ?? data.dueDate ?? ""),
+    planned_amount: planned,
+    allocated_amount: allocated,
+    remaining_amount: planned - allocated,
+    status: (data.status ?? "open") as CommitmentInstance["status"],
+    created_at: data.created_at as string | undefined,
+    commitment_name: data.commitment_name as string | undefined,
+    commitment_type: data.commitment_type as CommitmentInstance["commitment_type"],
+  };
+}
+
+function normalizeLedger(id: string, data: FirebaseFirestore.DocumentData): LedgerEntry {
+  return {
+    id,
+    date: String(data.date ?? ""),
+    description: String(data.description ?? ""),
+    amount: Number(data.amount ?? 0),
+    type: (data.type ?? "expense") as LedgerEntry["type"],
+    account_id: String(data.account_id ?? data.accountId ?? ""),
+    commitment_id: (data.commitment_id ?? data.commitmentId ?? null) as string | null,
+    created_at: String(data.created_at ?? data.createdAt ?? new Date().toISOString()),
+  };
+}
+
+export async function ensureUser(userId: string, email?: string) {
+  await userRef(userId).set(
+    { uid: userId, email: email ?? null, updatedAt: new Date().toISOString(), createdAt: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+}
+
+export async function listAccounts(userId: string): Promise<Account[]> {
+  const snap = await collection(userId, COLLECTIONS.accounts).orderBy("name").get();
+  return snap.docs.map((d) => normalizeAccount(d.id, d.data()));
+}
+
+export async function createAccount(userId: string, body: Partial<Account>) {
+  const id = randomUUID();
+  await collection(userId, COLLECTIONS.accounts).doc(id).set({
+    ...stampCreate(userId),
+    name: body.name,
+    type: body.type,
+    current_balance: Number(body.current_balance ?? 0),
+    currentBalance: Number(body.current_balance ?? 0),
+    is_reserve: body.is_reserve ? 1 : 0,
+    isReserve: Boolean(body.is_reserve),
+  });
+  return getAccount(userId, id);
+}
+
+export async function getAccount(userId: string, id: string) {
+  const snap = await collection(userId, COLLECTIONS.accounts).doc(id).get();
+  return snap.exists ? normalizeAccount(snap.id, snap.data()!) : null;
+}
+
+export async function updateAccount(userId: string, body: Partial<Account> & { id: string }) {
+  await collection(userId, COLLECTIONS.accounts).doc(body.id).set(
+    {
+      ...stampUpdate(),
+      name: body.name,
+      type: body.type,
+      current_balance: Number(body.current_balance ?? 0),
+      currentBalance: Number(body.current_balance ?? 0),
+      is_reserve: body.is_reserve ? 1 : 0,
+      isReserve: Boolean(body.is_reserve),
+    },
+    { merge: true }
+  );
+  return getAccount(userId, body.id);
+}
+
+export async function syncAccountBalance(userId: string, id: string, actualBalance: number) {
+  await collection(userId, COLLECTIONS.accounts).doc(id).set(
+    { ...stampUpdate(), current_balance: actualBalance, currentBalance: actualBalance },
+    { merge: true }
+  );
+  return getAccount(userId, id);
+}
+
+export async function deleteAccount(userId: string, id: string) {
+  const batch = getFirebaseAdminFirestore().batch();
+  const commitments = await collection(userId, COLLECTIONS.commitments).where("account_id", "==", id).get();
+  commitments.docs.forEach((d) => batch.update(d.ref, { account_id: null, accountId: null, ...stampUpdate() }));
+  batch.delete(collection(userId, COLLECTIONS.accounts).doc(id));
+  await batch.commit();
+}
+
+export async function listCommitments(userId: string, activeOnly = true): Promise<Commitment[]> {
+  let q: FirebaseFirestore.Query = collection(userId, COLLECTIONS.commitments);
+  if (activeOnly) q = q.where("active", "==", 1);
+  const snap = await q.get();
+  return snap.docs.map((d) => normalizeCommitment(d.id, d.data())).sort((a, b) => a.due_date.localeCompare(b.due_date));
+}
+
+export async function getCommitment(userId: string, id: string) {
+  const snap = await collection(userId, COLLECTIONS.commitments).doc(id).get();
+  return snap.exists ? normalizeCommitment(snap.id, snap.data()!) : null;
+}
+
+export async function createCommitment(userId: string, body: Partial<Commitment>) {
+  const id = randomUUID();
+  await collection(userId, COLLECTIONS.commitments).doc(id).set({
+    ...stampCreate(userId),
+    name: body.name,
+    type: body.type,
+    amount: Number(body.amount ?? 0),
+    actual_amount: null,
+    actualAmount: null,
+    due_date: body.due_date,
+    dueDate: body.due_date,
+    recurrence_rule: body.recurrence_rule || null,
+    recurrenceRule: body.recurrence_rule || null,
+    priority: body.priority || "normal",
+    autopay: body.autopay ? 1 : 0,
+    account_id: body.account_id || null,
+    accountId: body.account_id || null,
+    active: 1,
+    paid: 0,
+    paid_date: null,
+    paidDate: null,
+  });
+  return getCommitment(userId, id);
+}
+
+export async function updateCommitment(userId: string, body: Partial<Commitment> & { id: string }) {
+  await collection(userId, COLLECTIONS.commitments).doc(body.id).set(
+    {
+      ...stampUpdate(),
+      name: body.name,
+      type: body.type,
+      amount: Number(body.amount ?? 0),
+      due_date: body.due_date,
+      dueDate: body.due_date,
+      recurrence_rule: body.recurrence_rule || null,
+      recurrenceRule: body.recurrence_rule || null,
+      priority: body.priority || "normal",
+      autopay: body.autopay ? 1 : 0,
+      account_id: body.account_id || null,
+      accountId: body.account_id || null,
+      active: body.active ?? 1,
+      paid: body.paid ?? 0,
+    },
+    { merge: true }
+  );
+  return getCommitment(userId, body.id);
+}
+
+export async function deleteCommitment(userId: string, id: string) {
+  const db = getFirebaseAdminFirestore();
+  const batch = db.batch();
+  for (const name of [COLLECTIONS.commitmentAllocations, COLLECTIONS.commitmentInstances]) {
+    const snap = await collection(userId, name).where("commitment_id", "==", id).get();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+  }
+  const ledger = await collection(userId, COLLECTIONS.ledger).where("commitment_id", "==", id).get();
+  ledger.docs.forEach((d) => batch.update(d.ref, { commitment_id: null, commitmentId: null, ...stampUpdate() }));
+  batch.delete(collection(userId, COLLECTIONS.commitments).doc(id));
+  await batch.commit();
+}
+
+export function instanceId(commitmentId: string, dueDate: string) {
+  return `${commitmentId}_${dueDate}`;
+}
+
+export async function ensureInstance(userId: string, commitmentId: string, dueDate: string, plannedAmount: number) {
+  const id = instanceId(commitmentId, dueDate);
+  const ref = collection(userId, COLLECTIONS.commitmentInstances).doc(id);
+  await ref.set(
+    {
+      ...stampCreate(userId),
+      commitment_id: commitmentId,
+      commitmentId,
+      due_date: dueDate,
+      dueDate,
+      planned_amount: plannedAmount,
+      plannedAmount,
+      allocated_amount: 0,
+      allocatedAmount: 0,
+      remaining_amount: plannedAmount,
+      remainingAmount: plannedAmount,
+      status: "open",
+    },
+    { merge: true }
+  );
+  return id;
+}
+
+export async function getInstance(userId: string, commitmentId: string, dueDate: string) {
+  const snap = await collection(userId, COLLECTIONS.commitmentInstances).doc(instanceId(commitmentId, dueDate)).get();
+  if (!snap.exists) return null;
+  const instance = normalizeInstance(snap.id, snap.data()!);
+  const commitment = await getCommitment(userId, instance.commitment_id);
+  return { ...instance, commitment_name: commitment?.name, commitment_type: commitment?.type };
+}
+
+export async function listInstances(userId: string): Promise<CommitmentInstance[]> {
+  const snap = await collection(userId, COLLECTIONS.commitmentInstances).get();
+  return snap.docs.map((d) => normalizeInstance(d.id, d.data()));
+}
+
+export async function listInstancesForCommitment(userId: string, commitmentId: string, endDate: string) {
+  const snap = await collection(userId, COLLECTIONS.commitmentInstances)
+    .where("commitment_id", "==", commitmentId)
+    .where("due_date", "<=", endDate)
+    .get();
+  return snap.docs.map((d) => normalizeInstance(d.id, d.data())).sort((a, b) => a.due_date.localeCompare(b.due_date));
+}
+
+async function setInstanceAmounts(
+  userId: string,
+  id: string,
+  planned: number,
+  allocated: number,
+  status?: CommitmentInstance["status"]
+) {
+  const newStatus = status ?? (allocated >= planned - 0.005 ? "funded" : "open");
+  await collection(userId, COLLECTIONS.commitmentInstances).doc(id).set(
+    {
+      ...stampUpdate(),
+      planned_amount: planned,
+      plannedAmount: planned,
+      allocated_amount: allocated,
+      allocatedAmount: allocated,
+      remaining_amount: planned - allocated,
+      remainingAmount: planned - allocated,
+      status: newStatus,
+    },
+    { merge: true }
+  );
+}
+
+export async function updateInstancePlan(userId: string, commitmentId: string, dueDate: string, plannedAmount: number) {
+  const commitment = await getCommitment(userId, commitmentId);
+  if (!commitment) throw new Error("Commitment not found");
+  const id = await ensureInstance(userId, commitmentId, dueDate, commitment.amount);
+  const snap = await collection(userId, COLLECTIONS.commitmentInstances).doc(id).get();
+  const inst = normalizeInstance(snap.id, snap.data()!);
+  await setInstanceAmounts(userId, id, plannedAmount, inst.allocated_amount);
+}
+
+async function adjustAccountBalance(userId: string, accountId: string, delta: number) {
+  const account = await getAccount(userId, accountId);
+  if (!account) throw new Error(`Account ${accountId} not found`);
+  await syncAccountBalance(userId, accountId, account.current_balance + delta);
+}
+
+async function applyAllocations(userId: string, ledgerId: string, allocs: AllocationInput[]) {
+  for (const alloc of allocs) {
+    const commitment = await getCommitment(userId, alloc.commitment_id);
+    if (!commitment) throw new Error(`Commitment ${alloc.commitment_id} not found`);
+    const id = await ensureInstance(userId, alloc.commitment_id, alloc.instance_due_date, commitment.amount);
+    const inst = (await getInstance(userId, alloc.commitment_id, alloc.instance_due_date))!;
+    const remaining = inst.planned_amount - inst.allocated_amount;
+    if (alloc.amount > remaining + 0.005) {
+      throw new Error(`Allocation of $${alloc.amount.toFixed(2)} exceeds remaining $${remaining.toFixed(2)} for commitment`);
+    }
+    const allocationId = randomUUID();
+    await collection(userId, COLLECTIONS.commitmentAllocations).doc(allocationId).set({
+      ...stampCreate(userId),
+      ledger_id: ledgerId,
+      ledgerId,
+      instance_id: id,
+      instanceId: id,
+      commitment_id: alloc.commitment_id,
+      commitmentId: alloc.commitment_id,
+      amount: alloc.amount,
+      note: alloc.note || null,
+    });
+    await setInstanceAmounts(userId, id, inst.planned_amount, inst.allocated_amount + alloc.amount);
+  }
+}
+
+async function reverseAllocations(userId: string, ledgerId: string) {
+  const snap = await collection(userId, COLLECTIONS.commitmentAllocations).where("ledger_id", "==", ledgerId).get();
+  for (const doc of snap.docs) {
+    const alloc = row<CommitmentAllocation>(doc.id, doc.data());
+    const instRef = collection(userId, COLLECTIONS.commitmentInstances).doc(alloc.instance_id);
+    const instSnap = await instRef.get();
+    if (instSnap.exists) {
+      const inst = normalizeInstance(instSnap.id, instSnap.data()!);
+      await setInstanceAmounts(userId, inst.id, inst.planned_amount, Math.max(0, inst.allocated_amount - alloc.amount), "open");
+    }
+    await doc.ref.delete();
+  }
+}
+
+export async function listLedger(userId: string): Promise<LedgerEntry[]> {
+  const [ledgerSnap, allocSnap, itemSnap, commitments] = await Promise.all([
+    collection(userId, COLLECTIONS.ledger).get(),
+    collection(userId, COLLECTIONS.commitmentAllocations).get(),
+    collection(userId, COLLECTIONS.ledgerItems).get(),
+    listCommitments(userId, false),
+  ]);
+  const names = new Map(commitments.map((c) => [c.id, c.name]));
+  const allocsByLedger = new Map<string, CommitmentAllocation[]>();
+  allocSnap.docs.forEach((d) => {
+    const a = row<CommitmentAllocation>(d.id, d.data());
+    const arr = allocsByLedger.get(a.ledger_id) ?? [];
+    arr.push({ ...a, commitment_name: names.get(a.commitment_id) } as CommitmentAllocation & { commitment_name?: string });
+    allocsByLedger.set(a.ledger_id, arr);
+  });
+  const itemsByLedger = new Map<string, LedgerItem[]>();
+  itemSnap.docs.forEach((d) => {
+    const item = row<LedgerItem>(d.id, d.data());
+    const arr = itemsByLedger.get(item.ledger_id) ?? [];
+    arr.push({ ...item, commitment_name: item.commitment_id ? names.get(item.commitment_id) : undefined });
+    itemsByLedger.set(item.ledger_id, arr);
+  });
+  return ledgerSnap.docs
+    .map((d) => normalizeLedger(d.id, d.data()))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at))
+    .map((entry) => ({ ...entry, allocations: allocsByLedger.get(entry.id) ?? [], items: itemsByLedger.get(entry.id) ?? [] }));
+}
+
+export async function createLedger(userId: string, input: {
+  description: string;
+  amount: number;
+  type: LedgerEntry["type"];
+  account_id: string;
+  allocations?: AllocationInput[];
+  items?: LedgerItemInput[];
+}) {
+  const id = randomUUID();
+  const date = format(new Date(), "yyyy-MM-dd");
+  await collection(userId, COLLECTIONS.ledger).doc(id).set({
+    ...stampCreate(userId),
+    date,
+    description: input.description,
+    amount: input.amount,
+    type: input.type,
+    account_id: input.account_id,
+    accountId: input.account_id,
+    commitment_id: null,
+    commitmentId: null,
+  });
+  await adjustAccountBalance(userId, input.account_id, input.type === "income" ? input.amount : -input.amount);
+  for (const item of input.items ?? []) {
+    const itemId = randomUUID();
+    await collection(userId, COLLECTIONS.ledgerItems).doc(itemId).set({
+      ...stampCreate(userId),
+      ledger_id: id,
+      ledgerId: id,
+      description: item.description,
+      amount: item.amount,
+      commitment_id: item.commitment_id || null,
+      commitmentId: item.commitment_id || null,
+      instance_due_date: item.instance_due_date || null,
+      instanceDueDate: item.instance_due_date || null,
+    });
+  }
+  await applyAllocations(userId, id, input.allocations ?? []);
+  return id;
+}
+
+export async function updateLedger(userId: string, id: string, input: Partial<LedgerEntry> & { allocations?: AllocationInput[] }) {
+  const existingSnap = await collection(userId, COLLECTIONS.ledger).doc(id).get();
+  if (!existingSnap.exists) return false;
+  const existing = normalizeLedger(existingSnap.id, existingSnap.data()!);
+  const amount = input.amount ?? existing.amount;
+  const type = input.type ?? existing.type;
+  const accountId = input.account_id ?? existing.account_id;
+  if (input.allocations) await reverseAllocations(userId, id);
+  await adjustAccountBalance(userId, existing.account_id, -(existing.type === "income" ? existing.amount : -existing.amount));
+  await collection(userId, COLLECTIONS.ledger).doc(id).set(
+    {
+      ...stampUpdate(),
+      description: input.description ?? existing.description,
+      amount,
+      type,
+      account_id: accountId,
+      accountId,
+    },
+    { merge: true }
+  );
+  await adjustAccountBalance(userId, accountId, type === "income" ? amount : -amount);
+  if (input.allocations) await applyAllocations(userId, id, input.allocations);
+  return true;
+}
+
+export async function deleteLedger(userId: string, id: string) {
+  const existingSnap = await collection(userId, COLLECTIONS.ledger).doc(id).get();
+  if (!existingSnap.exists) return false;
+  const existing = normalizeLedger(existingSnap.id, existingSnap.data()!);
+  await reverseAllocations(userId, id);
+  const items = await collection(userId, COLLECTIONS.ledgerItems).where("ledger_id", "==", id).get();
+  await Promise.all(items.docs.map((d) => d.ref.delete()));
+  await adjustAccountBalance(userId, existing.account_id, -(existing.type === "income" ? existing.amount : -existing.amount));
+  await existingSnap.ref.delete();
+  return true;
+}
+
+export async function resetUserData(userId: string) {
+  for (const name of Object.values(COLLECTIONS)) {
+    const snap = await collection(userId, name).get();
+    await Promise.all(snap.docs.map((d) => d.ref.delete()));
+  }
+}
+
+export async function listRecurringCommitmentsForTrends(userId: string, commitmentId?: string) {
+  const commitments = commitmentId
+    ? (await getCommitment(userId, commitmentId))
+      ? [(await getCommitment(userId, commitmentId))!]
+      : []
+    : (await listCommitments(userId)).filter((c) => c.recurrence_rule);
+  return commitments.map((c) => ({ id: c.id, name: c.name, type: c.type, recurrence_rule: c.recurrence_rule }));
+}
+
+export async function listInstancesForTrendPeriod(userId: string, commitmentId: string, start: string, end: string) {
+  const snap = await collection(userId, COLLECTIONS.commitmentInstances)
+    .where("commitment_id", "==", commitmentId)
+    .where("due_date", ">=", start)
+    .where("due_date", "<=", end)
+    .get();
+  return snap.docs.map((d) => normalizeInstance(d.id, d.data()));
+}
+
+export async function markCommitmentPaid(userId: string, id: string, actualAmount: number, instanceDueDate?: string, note?: string, accountIdOverride?: string) {
+  const commitment = await getCommitment(userId, id);
+  if (!commitment) throw new Error("not found");
+  const accountId = accountIdOverride || commitment.account_id;
+  if (!accountId) throw new Error("No account linked. Please select an account for this payment.");
+  const paidDate = format(new Date(), "yyyy-MM-dd");
+  const dueDate = instanceDueDate || commitment.due_date;
+  const ledgerId = await createLedger(userId, {
+    description: note ? `${commitment.name}: ${note}` : commitment.name,
+    amount: actualAmount,
+    type: commitment.type === "income" ? "income" : "expense",
+    account_id: accountId,
+    items: [{ description: note || commitment.name, amount: actualAmount, commitment_id: commitment.id, instance_due_date: dueDate }],
+  });
+  await applyAllocations(userId, ledgerId, [{ commitment_id: commitment.id, instance_due_date: dueDate, amount: actualAmount, note }]);
+  const inst = await getInstance(userId, commitment.id, dueDate);
+  if (inst?.status === "funded") {
+    const { advanceByRule } = await import("@/lib/instances");
+    const { parseISO } = await import("date-fns");
+    if (commitment.recurrence_rule) {
+      const next = format(advanceByRule(parseISO(commitment.due_date), commitment.recurrence_rule), "yyyy-MM-dd");
+      await collection(userId, COLLECTIONS.commitments).doc(id).set(
+        { ...stampUpdate(), due_date: next, dueDate: next, paid: 0, actual_amount: null, actualAmount: null, paid_date: null, paidDate: null },
+        { merge: true }
+      );
+    } else {
+      await collection(userId, COLLECTIONS.commitments).doc(id).set(
+        { ...stampUpdate(), paid: 1, actual_amount: actualAmount, actualAmount: actualAmount, paid_date: paidDate, paidDate },
+        { merge: true }
+      );
+    }
+  }
+}
+
+export async function advanceCommitment(userId: string, id: string, instanceDueDate?: string, rolloverLeftover = false) {
+  const commitment = await getCommitment(userId, id);
+  if (!commitment) throw new Error("not found");
+  const dueDate = instanceDueDate || commitment.due_date;
+  const instId = await ensureInstance(userId, commitment.id, dueDate, commitment.amount);
+  const inst = (await getInstance(userId, commitment.id, dueDate))!;
+  await setInstanceAmounts(userId, instId, inst.planned_amount, inst.allocated_amount, "funded");
+  if (commitment.recurrence_rule) {
+    const { advanceByRule } = await import("@/lib/instances");
+    const { parseISO } = await import("date-fns");
+    const nextDate = format(advanceByRule(parseISO(commitment.due_date), commitment.recurrence_rule), "yyyy-MM-dd");
+    if (rolloverLeftover) {
+      const leftover = inst.planned_amount - inst.allocated_amount;
+      if (leftover > 0.005) {
+        const nextId = await ensureInstance(userId, commitment.id, nextDate, commitment.amount);
+        const next = (await getInstance(userId, commitment.id, nextDate))!;
+        await setInstanceAmounts(userId, nextId, next.planned_amount + leftover, next.allocated_amount);
+      }
+    }
+    await collection(userId, COLLECTIONS.commitments).doc(id).set(
+      { ...stampUpdate(), due_date: nextDate, dueDate: nextDate, paid: 0, actual_amount: null, actualAmount: null, paid_date: null, paidDate: null },
+      { merge: true }
+    );
+  } else {
+    await collection(userId, COLLECTIONS.commitments).doc(id).set(
+      { ...stampUpdate(), paid: 1, paid_date: format(new Date(), "yyyy-MM-dd") },
+      { merge: true }
+    );
+  }
+}

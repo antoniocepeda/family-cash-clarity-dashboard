@@ -1,6 +1,6 @@
-import { getDb } from "./db";
 import { addDays, format, parseISO, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 import { advanceByRule } from "./instances";
+import { listAccounts, listCommitments, listInstances } from "./repositories/firestore";
 
 interface CommitmentRow {
   id: string;
@@ -51,18 +51,10 @@ export function expandRecurrence(commitment: CommitmentRow, startDate: Date, end
   return dates;
 }
 
-export function generateProjection(days: number = 28, simulateEarlyIds: string[] = []): ProjectionDay[] {
-  const db = getDb();
-  const accounts = db.prepare("SELECT * FROM accounts").all() as {
-    current_balance: number;
-    is_reserve: number;
-  }[];
-  const commitments = db.prepare("SELECT * FROM commitments WHERE active = 1").all() as CommitmentRow[];
-
-  const instanceRows = db.prepare(
-    `SELECT commitment_id, due_date, planned_amount, allocated_amount, status
-     FROM commitment_instances`
-  ).all() as { commitment_id: string; due_date: string; planned_amount: number; allocated_amount: number; status: string }[];
+export async function generateProjection(userId: string, days: number = 28, simulateEarlyIds: string[] = []): Promise<ProjectionDay[]> {
+  const accounts = await listAccounts(userId);
+  const commitments = await listCommitments(userId);
+  const instanceRows = await listInstances(userId);
 
   const instanceMap = new Map<string, typeof instanceRows[0]>();
   for (const row of instanceRows) {
@@ -147,14 +139,13 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
   return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function generateAlerts(): {
+export async function generateAlerts(userId: string): Promise<{
   severity: "critical" | "warning" | "info";
   message: string;
   action_text: string;
-}[] {
-  const projection = generateProjection(14);
+}[]> {
+  const projection = await generateProjection(userId, 14);
   const alerts: { severity: "critical" | "warning" | "info"; message: string; action_text: string }[] = [];
-  const db = getDb();
 
   const BUFFER_THRESHOLD = 500;
 
@@ -169,18 +160,14 @@ export function generateAlerts(): {
     }
   }
 
-  const commitments = db.prepare(
-    "SELECT * FROM commitments WHERE active = 1 AND type = 'bill' AND paid = 0"
-  ).all() as CommitmentRow[];
+  const commitments = (await listCommitments(userId)).filter((c) => c.active === 1 && c.type === "bill" && c.paid === 0);
   const now = new Date();
 
   for (const commitment of commitments) {
     const due = parseISO(commitment.due_date);
     const hoursUntil = (due.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-    const instanceRow = db.prepare(
-      "SELECT allocated_amount, planned_amount, status FROM commitment_instances WHERE commitment_id = ? AND due_date = ?"
-    ).get(commitment.id, commitment.due_date) as { allocated_amount: number; planned_amount: number; status: string } | undefined;
+    const instanceRow = (await listInstances(userId)).find((i) => i.commitment_id === commitment.id && i.due_date === commitment.due_date);
 
     if (instanceRow?.status === "funded") continue;
 

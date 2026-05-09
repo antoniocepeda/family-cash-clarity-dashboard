@@ -1,8 +1,13 @@
-import Database from "better-sqlite3";
-import { randomUUID } from "crypto";
 import { addDays, addWeeks, addMonths, format, startOfDay } from "date-fns";
 import { expandRecurrence } from "./projection";
 import { CommitmentInstance } from "./types";
+import {
+  ensureInstance as ensureFirestoreInstance,
+  getCommitment,
+  getInstance,
+  listCommitments,
+  listInstancesForCommitment,
+} from "./repositories/firestore";
 
 export function advanceByRule(base: Date, rule: string): Date {
   if (rule.startsWith("every_")) {
@@ -25,171 +30,88 @@ export function advanceByRule(base: Date, rule: string): Date {
   }
 }
 
-interface CommitmentRow {
-  id: string;
-  name: string;
-  type: "income" | "bill";
-  amount: number;
-  due_date: string;
-  recurrence_rule: string | null;
-  priority: string;
-  autopay: number;
-  account_id: string | null;
-  active: number;
-  paid: number;
-}
-
-export function ensureInstance(
-  db: Database.Database,
+export async function ensureInstance(
+  userId: string,
   commitmentId: string,
   dueDate: string,
   plannedAmount: number
-): string {
-  db.prepare(
-    `INSERT OR IGNORE INTO commitment_instances (id, commitment_id, due_date, planned_amount)
-     VALUES (?, ?, ?, ?)`
-  ).run(randomUUID(), commitmentId, dueDate, plannedAmount);
-
-  const row = db
-    .prepare("SELECT id FROM commitment_instances WHERE commitment_id = ? AND due_date = ?")
-    .get(commitmentId, dueDate) as { id: string };
-
-  return row.id;
+): Promise<string> {
+  return ensureFirestoreInstance(userId, commitmentId, dueDate, plannedAmount);
 }
 
-export function getInstanceRow(
-  db: Database.Database,
+export async function getInstanceRow(
+  userId: string,
   commitmentId: string,
   dueDate: string
-): CommitmentInstance | null {
-  const row = db
-    .prepare(
-      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
-       FROM commitment_instances ci
-       JOIN commitments c ON c.id = ci.commitment_id
-       WHERE ci.commitment_id = ? AND ci.due_date = ?`
-    )
-    .get(commitmentId, dueDate) as (CommitmentInstance & { commitment_name: string; commitment_type: string }) | undefined;
-
-  if (!row) return null;
-
-  return {
-    ...row,
-    remaining_amount: row.planned_amount - row.allocated_amount,
-  };
+): Promise<CommitmentInstance | null> {
+  return getInstance(userId, commitmentId, dueDate);
 }
 
-export function getOrExpandInstances(
-  db: Database.Database,
+export async function getOrExpandInstances(
+  userId: string,
   commitmentId: string,
   windowEnd: Date
-): CommitmentInstance[] {
-  const commitment = db
-    .prepare("SELECT * FROM commitments WHERE id = ?")
-    .get(commitmentId) as CommitmentRow | undefined;
-
+): Promise<CommitmentInstance[]> {
+  const commitment = await getCommitment(userId, commitmentId);
   if (!commitment) return [];
 
   const today = startOfDay(new Date());
   const occurrences = expandRecurrence(commitment, today, windowEnd);
 
   for (const occ of occurrences) {
-    const dateStr = format(occ, "yyyy-MM-dd");
-    ensureInstance(db, commitmentId, dateStr, commitment.amount);
+    await ensureInstance(userId, commitmentId, format(occ, "yyyy-MM-dd"), commitment.amount);
   }
 
-  const rows = db
-    .prepare(
-      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
-       FROM commitment_instances ci
-       JOIN commitments c ON c.id = ci.commitment_id
-       WHERE ci.commitment_id = ? AND ci.due_date >= ? AND ci.due_date <= ?
-       ORDER BY ci.due_date ASC`
-    )
-    .all(commitmentId, format(today, "yyyy-MM-dd"), format(windowEnd, "yyyy-MM-dd")) as CommitmentInstance[];
-
-  return rows.map((r) => ({
-    ...r,
-    remaining_amount: r.planned_amount - r.allocated_amount,
-  }));
+  return listInstancesForCommitment(userId, commitmentId, format(windowEnd, "yyyy-MM-dd"));
 }
 
-export function getEligibleInstances(db: Database.Database): CommitmentInstance[] {
+export async function getEligibleInstances(userId: string): Promise<CommitmentInstance[]> {
   const today = startOfDay(new Date());
   const windowEnd = addDays(today, 28);
   const todayStr = format(today, "yyyy-MM-dd");
   const windowEndStr = format(windowEnd, "yyyy-MM-dd");
+  const commitments = (await listCommitments(userId)).filter((c) => c.active === 1 && c.paid === 0);
 
-  const commitments = db
-    .prepare("SELECT * FROM commitments WHERE active = 1 AND paid = 0")
-    .all() as CommitmentRow[];
-
+  const rows: CommitmentInstance[] = [];
   for (const commitment of commitments) {
     if (commitment.due_date < todayStr) {
-      ensureInstance(db, commitment.id, commitment.due_date, commitment.amount);
+      await ensureInstance(userId, commitment.id, commitment.due_date, commitment.amount);
     }
-    const occurrences = expandRecurrence(commitment, today, windowEnd);
-    for (const occ of occurrences) {
-      const dateStr = format(occ, "yyyy-MM-dd");
-      ensureInstance(db, commitment.id, dateStr, commitment.amount);
+    for (const occ of expandRecurrence(commitment, today, windowEnd)) {
+      await ensureInstance(userId, commitment.id, format(occ, "yyyy-MM-dd"), commitment.amount);
     }
+    const instances = await listInstancesForCommitment(userId, commitment.id, windowEndStr);
+    rows.push(
+      ...instances
+        .filter((i) => i.status === "open" && i.due_date <= windowEndStr)
+        .map((i) => ({ ...i, commitment_name: commitment.name, commitment_type: commitment.type }))
+    );
   }
 
-  const rows = db
-    .prepare(
-      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
-       FROM commitment_instances ci
-       JOIN commitments c ON c.id = ci.commitment_id
-       WHERE ci.status = 'open'
-         AND c.active = 1
-         AND ci.due_date <= ?
-       ORDER BY ci.due_date ASC`
-    )
-    .all(windowEndStr) as CommitmentInstance[];
-
-  return rows.map((r) => ({
-    ...r,
-    remaining_amount: r.planned_amount - r.allocated_amount,
-  }));
+  return rows.sort((a, b) => a.due_date.localeCompare(b.due_date));
 }
 
-export function getAllInstancesForCommitments(
-  db: Database.Database,
+export async function getAllInstancesForCommitments(
+  userId: string,
   windowEnd: Date
-): CommitmentInstance[] {
+): Promise<CommitmentInstance[]> {
   const today = startOfDay(new Date());
   const todayStr = format(today, "yyyy-MM-dd");
   const windowEndStr = format(windowEnd, "yyyy-MM-dd");
+  const commitments = (await listCommitments(userId)).filter((c) => c.active === 1);
 
-  const commitments = db
-    .prepare("SELECT * FROM commitments WHERE active = 1")
-    .all() as CommitmentRow[];
-
+  const rows: CommitmentInstance[] = [];
   for (const commitment of commitments) {
     if (commitment.paid && !commitment.recurrence_rule) continue;
     if (commitment.due_date < todayStr) {
-      ensureInstance(db, commitment.id, commitment.due_date, commitment.amount);
+      await ensureInstance(userId, commitment.id, commitment.due_date, commitment.amount);
     }
-    const occurrences = expandRecurrence(commitment, today, windowEnd);
-    for (const occ of occurrences) {
-      const dateStr = format(occ, "yyyy-MM-dd");
-      ensureInstance(db, commitment.id, dateStr, commitment.amount);
+    for (const occ of expandRecurrence(commitment, today, windowEnd)) {
+      await ensureInstance(userId, commitment.id, format(occ, "yyyy-MM-dd"), commitment.amount);
     }
+    const instances = await listInstancesForCommitment(userId, commitment.id, windowEndStr);
+    rows.push(...instances.map((i) => ({ ...i, commitment_name: commitment.name, commitment_type: commitment.type })));
   }
 
-  const rows = db
-    .prepare(
-      `SELECT ci.*, c.name as commitment_name, c.type as commitment_type
-       FROM commitment_instances ci
-       JOIN commitments c ON c.id = ci.commitment_id
-       WHERE c.active = 1
-         AND ci.due_date <= ?
-       ORDER BY ci.due_date ASC`
-    )
-    .all(windowEndStr) as CommitmentInstance[];
-
-  return rows.map((r) => ({
-    ...r,
-    remaining_amount: r.planned_amount - r.allocated_amount,
-  }));
+  return rows.sort((a, b) => a.due_date.localeCompare(b.due_date));
 }
