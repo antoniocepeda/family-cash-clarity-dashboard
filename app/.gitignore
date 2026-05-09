@@ -13,6 +13,10 @@
 # testing
 /coverage
 
+# local database
+/data/*.db
+/data/*.db-*
+
 # next.js
 /.next/
 /out/

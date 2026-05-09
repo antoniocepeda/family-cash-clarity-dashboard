@@ -41,17 +41,28 @@ export default function SpendingTrends() {
   const [range, setRange] = useState<RangeType>("8");
 
   useEffect(() => {
-    setLoading(true);
     const params = new URLSearchParams({ period, range });
     if (selectedCommitmentId !== "all") params.set("commitment_id", selectedCommitmentId);
+
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) setLoading(true);
+    });
 
     fetch(`/api/trends?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         setTrends(data);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCommitmentId, period, range]);
 
   const selectedTrend = useMemo(() => {

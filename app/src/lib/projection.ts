@@ -79,7 +79,7 @@ export function generateProjection(days: number = 28, simulateEarlyIds: string[]
   const endDate = addDays(today, days);
 
   const dayMap = new Map<string, ProjectionDay>();
-  let runningBalance = totalBalance;
+  const runningBalance = totalBalance;
 
   for (let i = 0; i <= days; i++) {
     const d = addDays(today, i);

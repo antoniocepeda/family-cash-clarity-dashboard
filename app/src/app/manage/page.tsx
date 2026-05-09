@@ -23,7 +23,7 @@ export default function ManagePage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   if (loading) {
