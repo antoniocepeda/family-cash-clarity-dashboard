@@ -7,6 +7,7 @@ import NextBills from "@/components/NextBills";
 import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
+import { authFetch } from "@/lib/auth-fetch";
 import { Account, CommitmentWithInstances, AllocationInput, LedgerItemInput, ProjectionDay, Alert } from "@/lib/types";
 
 export default function Dashboard() {
@@ -21,17 +22,17 @@ export default function Dashboard() {
   const fetchProjection = useCallback(async (days?: number) => {
     const params = new URLSearchParams();
     params.set("days", String(days ?? projectionDays));
-    const res = await fetch(`/api/projections?${params.toString()}`);
+    const res = await authFetch(`/api/projections?${params.toString()}`);
     return res.json();
   }, [projectionDays]);
 
   const fetchAll = useCallback(async () => {
     try {
       const [acctRes, cmtRes, proj, alertRes] = await Promise.all([
-        fetch("/api/accounts"),
-        fetch("/api/commitments"),
+        authFetch("/api/accounts"),
+        authFetch("/api/commitments"),
         fetchProjection(),
-        fetch("/api/alerts"),
+        authFetch("/api/alerts"),
       ]);
       const [accts, cmts, alts] = await Promise.all([
         acctRes.json(),
@@ -69,7 +70,7 @@ export default function Dashboard() {
     autopay: boolean;
     account_id: string;
   }) => {
-    await fetch("/api/commitments", {
+    await authFetch("/api/commitments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -78,7 +79,7 @@ export default function Dashboard() {
   };
 
   const handleSyncWithBank = async (id: string, balance: number) => {
-    await fetch("/api/accounts/sync", {
+    await authFetch("/api/accounts/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, actual_balance: balance }),
@@ -94,7 +95,7 @@ export default function Dashboard() {
     allocations: AllocationInput[];
     items: LedgerItemInput[];
   }) => {
-    await fetch("/api/ledger", {
+    await authFetch("/api/ledger", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -108,7 +109,7 @@ export default function Dashboard() {
     current_balance: number;
     is_reserve: boolean;
   }) => {
-    await fetch("/api/accounts", {
+    await authFetch("/api/accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),

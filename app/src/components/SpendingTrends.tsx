@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { authFetch } from "@/lib/auth-fetch";
 import {
   BarChart,
   Bar,
@@ -49,7 +50,7 @@ export default function SpendingTrends() {
       if (!cancelled) setLoading(true);
     });
 
-    fetch(`/api/trends?${params.toString()}`)
+    authFetch(`/api/trends?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;

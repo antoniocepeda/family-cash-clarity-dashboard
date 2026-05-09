@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { ensureInstance } from "@/lib/instances";
 import { AllocationInput } from "@/lib/types";
@@ -50,7 +51,7 @@ function applyAllocations(
   }
 }
 
-export async function PATCH(
+async function handlePATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -122,7 +123,7 @@ export async function PATCH(
   return NextResponse.json({ success: true });
 }
 
-export async function DELETE(
+async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -159,3 +160,6 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
+
+export const PATCH = withAuth(handlePATCH);
+export const DELETE = withAuth(handleDELETE);

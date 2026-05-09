@@ -3,13 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import Nav from "@/components/Nav";
 import LedgerStatement from "@/components/LedgerStatement";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function TransactionsPage() {
   const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAccounts = useCallback(() => {
-    fetch("/api/accounts")
+    authFetch("/api/accounts")
       .then((r) => r.json())
       .then((data) => setAccounts(data))
       .catch((err) => console.error("Failed to fetch accounts:", err))

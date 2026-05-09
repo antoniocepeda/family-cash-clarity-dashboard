@@ -31,6 +31,32 @@ npm run lint
 npm run build
 ```
 
+## Firebase App Hosting
+
+This is a full-stack Next.js app with API routes, so deploy it with Firebase App Hosting instead of plain Firebase Hosting.
+
+The App Hosting configuration lives at:
+
+```text
+app/apphosting.yaml
+```
+
+When creating the App Hosting backend in the Firebase console or CLI, set the repo-relative app root directory to:
+
+```text
+app
+```
+
+App Hosting will install dependencies, run `npm run build`, and serve the Next.js app on Cloud Run. Do not add a static Firebase Hosting rewrite for this app unless the API routes are moved elsewhere.
+
+For CLI setup:
+
+```bash
+firebase apphosting:backends:create --project <firebase-project-id>
+```
+
+When prompted for the app root directory, enter `app`.
+
 ## Local Data
 
 The app uses SQLite through `better-sqlite3`. By default, the database is created at:
@@ -39,7 +65,11 @@ The app uses SQLite through `better-sqlite3`. By default, the database is create
 app/data/family-cash.db
 ```
 
+Set `FAMILY_CASH_DB_PATH` to override the database file path.
+
 Files under `app/data/*.db*` are ignored by Git because they are local runtime data. Back up that folder before resetting data or moving to another machine.
+
+On Firebase App Hosting, `app/apphosting.yaml` sets `FAMILY_CASH_DB_PATH` to `/tmp/family-cash.db`. That keeps the current SQLite API routes runnable on Cloud Run, but Cloud Run instance storage is ephemeral and not shared across instances or rollouts. Use Firestore, Cloud SQL, or another durable store before treating the hosted deployment as production household data.
 
 ## Project Layout
 

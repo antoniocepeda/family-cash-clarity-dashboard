@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getEligibleInstances, ensureInstance } from "@/lib/instances";
 
-export async function GET() {
+async function handleGET() {
   const db = getDb();
   const instances = getEligibleInstances(db);
   return NextResponse.json(instances);
 }
 
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
   const { commitment_id, due_date, planned_amount } = await req.json();
   if (!commitment_id || !due_date || planned_amount === undefined) {
     return NextResponse.json(
@@ -43,3 +44,6 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export const GET = withAuth(handleGET);
+export const PATCH = withAuth(handlePATCH);

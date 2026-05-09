@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { ensureInstance, advanceByRule } from "@/lib/instances";
 import { format, parseISO } from "date-fns";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const { commitment_id, instance_due_date, action } = await req.json();
 
   if (!commitment_id || !instance_due_date || !action) {
@@ -82,3 +83,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export const POST = withAuth(handlePOST);

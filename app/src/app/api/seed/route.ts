@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { v4 as uuid } from "uuid";
 import { format, addDays, startOfDay } from "date-fns";
@@ -20,7 +21,7 @@ function nextDueDate(dayOfMonth: number): string {
   return format(nextMonth, "yyyy-MM-dd");
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const checkingBalance = body.checking_balance ?? 0;
 
@@ -85,3 +86,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true, message: "Seed data loaded" });
 }
+
+export const POST = withAuth(handlePOST);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 
-export async function POST() {
+async function handlePOST() {
   const db = getDb();
 
   // Drop legacy tables from pre-rename schema
@@ -21,3 +22,5 @@ export async function POST() {
   db.prepare("DELETE FROM projection_snapshots").run();
   return NextResponse.json({ success: true, message: "All data cleared" });
 }
+
+export const POST = withAuth(handlePOST);

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { ensureInstance } from "@/lib/instances";
 import { AllocationInput, LedgerItemInput } from "@/lib/types";
 import { randomUUID } from "crypto";
 import { format } from "date-fns";
 
-export async function GET() {
+async function handleGET() {
   const db = getDb();
   const entries = db
     .prepare("SELECT * FROM ledger ORDER BY date DESC, created_at DESC")
@@ -50,7 +51,7 @@ export async function GET() {
   return NextResponse.json(enriched);
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const { description, amount, type, account_id, allocations, items } = await req.json();
   if (!description || amount === undefined || !type || !account_id) {
     return NextResponse.json(
@@ -136,3 +137,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true, id });
 }
+
+export const GET = withAuth(handleGET);
+export const POST = withAuth(handlePOST);

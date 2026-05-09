@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getAllInstancesForCommitments } from "@/lib/instances";
 import { Commitment, CommitmentInstance } from "@/lib/types";
 import { addDays, startOfDay } from "date-fns";
 import { v4 as uuid } from "uuid";
 
-export async function GET() {
+async function handleGET() {
   const db = getDb();
   const commitments = db
     .prepare("SELECT * FROM commitments WHERE active = 1 ORDER BY due_date ASC")
@@ -29,7 +30,7 @@ export async function GET() {
   return NextResponse.json(enriched);
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = await req.json();
   const db = getDb();
   const id = uuid();
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(commitment, { status: 201 });
 }
 
-export async function PUT(req: NextRequest) {
+async function handlePUT(req: NextRequest) {
   const body = await req.json();
   const db = getDb();
 
@@ -79,7 +80,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json(commitment);
 }
 
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -119,3 +120,8 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export const GET = withAuth(handleGET);
+export const POST = withAuth(handlePOST);
+export const PUT = withAuth(handlePUT);
+export const DELETE = withAuth(handleDELETE);

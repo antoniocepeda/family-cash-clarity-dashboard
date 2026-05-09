@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Nav from "@/components/Nav";
+import { authFetch } from "@/lib/auth-fetch";
 import { Account, Commitment } from "@/lib/types";
 
 type Tab = "accounts" | "commitments" | "help";
@@ -14,8 +15,8 @@ export default function ManagePage() {
 
   const fetchData = useCallback(async () => {
     const [acctRes, cmtRes] = await Promise.all([
-      fetch("/api/accounts"),
-      fetch("/api/commitments"),
+      authFetch("/api/accounts"),
+      authFetch("/api/commitments"),
     ]);
     setAccounts(await acctRes.json());
     setCommitments(await cmtRes.json());
@@ -113,7 +114,7 @@ function AccountsManager({
 
   const saveEdit = async () => {
     if (!form.id) return;
-    await fetch("/api/accounts", {
+    await authFetch("/api/accounts", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -125,12 +126,12 @@ function AccountsManager({
   const deleteAccount = async (id: string) => {
     if (!confirm("Delete this account? Expenses linked to it will lose their account reference."))
       return;
-    await fetch(`/api/accounts?id=${id}`, { method: "DELETE" });
+    await authFetch(`/api/accounts?id=${id}`, { method: "DELETE" });
     onRefresh();
   };
 
   const addAccount = async () => {
-    await fetch("/api/accounts", {
+    await authFetch("/api/accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -341,7 +342,7 @@ function CommitmentsManager({
     const effectiveRule = (form.recurrence_rule === "custom" || isCustomRule(form.recurrence_rule)) && editCustomValue
       ? `every_${editCustomValue}_${editCustomUnit}`
       : form.recurrence_rule;
-    await fetch("/api/commitments", {
+    await authFetch("/api/commitments", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, recurrence_rule: effectiveRule }),
@@ -352,7 +353,7 @@ function CommitmentsManager({
 
   const deleteCommitment = async (id: string) => {
     if (!confirm("Delete this expense permanently?")) return;
-    await fetch(`/api/commitments?id=${id}`, { method: "DELETE" });
+    await authFetch(`/api/commitments?id=${id}`, { method: "DELETE" });
     onRefresh();
   };
 
@@ -360,7 +361,7 @@ function CommitmentsManager({
     const effectiveRule = newCmt.recurrence_rule === "custom" && customValue
       ? `every_${customValue}_${customUnit}`
       : newCmt.recurrence_rule;
-    await fetch("/api/commitments", {
+    await authFetch("/api/commitments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -534,7 +535,7 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
 
   const handleReset = async () => {
     if (confirmText !== "RESET") return;
-    await fetch("/api/reset", { method: "POST" });
+    await authFetch("/api/reset", { method: "POST" });
     setConfirmText("");
     onRefresh();
   };
@@ -542,7 +543,7 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
   const handleSeed = async () => {
     const balance = parseFloat(seedBalance);
     if (isNaN(balance)) return;
-    await fetch("/api/seed", {
+    await authFetch("/api/seed", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ checking_balance: balance }),

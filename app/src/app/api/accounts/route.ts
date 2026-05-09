@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { v4 as uuid } from "uuid";
 
-export async function GET() {
+async function handleGET() {
   const db = getDb();
   const accounts = db.prepare("SELECT * FROM accounts ORDER BY name").all();
   return NextResponse.json(accounts);
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const body = await req.json();
   const db = getDb();
   const id = uuid();
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(account, { status: 201 });
 }
 
-export async function PUT(req: NextRequest) {
+async function handlePUT(req: NextRequest) {
   const body = await req.json();
   const db = getDb();
   const now = new Date().toISOString();
@@ -37,7 +38,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json(account);
 }
 
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -58,3 +59,8 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export const GET = withAuth(handleGET);
+export const POST = withAuth(handlePOST);
+export const PUT = withAuth(handlePUT);
+export const DELETE = withAuth(handleDELETE);

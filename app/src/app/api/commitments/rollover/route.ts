@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { ensureInstance, advanceByRule } from "@/lib/instances";
 import { format, parseISO } from "date-fns";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const { id, instance_due_date } = await req.json();
   if (!id)
     return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -54,3 +55,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export const POST = withAuth(handlePOST);

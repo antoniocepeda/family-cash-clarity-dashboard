@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { format, subWeeks, subMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 
@@ -22,7 +23,7 @@ interface CommitmentTrend {
   total_under: number;
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const commitmentId = searchParams.get("commitment_id") || searchParams.get("event_id");
   const period = searchParams.get("period") || "weeks";
@@ -105,3 +106,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(trends);
 }
+
+export const GET = withAuth(handleGET);

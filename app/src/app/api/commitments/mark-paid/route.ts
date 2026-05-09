@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { ensureInstance, advanceByRule } from "@/lib/instances";
 import { format, parseISO } from "date-fns";
 import { randomUUID } from "crypto";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const { id, actual_amount, instance_due_date, note, account_id: overrideAccountId } = await req.json();
   if (!id || actual_amount === undefined)
     return NextResponse.json(
@@ -102,3 +103,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export const POST = withAuth(handlePOST);

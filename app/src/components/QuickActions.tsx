@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authFetch } from "@/lib/auth-fetch";
 import { Account, AllocationInput, LedgerItemInput, CommitmentInstance } from "@/lib/types";
 
 interface Props {
@@ -368,7 +369,7 @@ function TransactionWizard({
   const [loadingInstances, setLoadingInstances] = useState(true);
 
   useEffect(() => {
-    fetch("/api/commitment-instances")
+    authFetch("/api/commitment-instances")
       .then((r) => r.json())
       .then((data: CommitmentInstance[]) => {
         setEligibleInstances(data);

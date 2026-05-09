@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Nav from "@/components/Nav";
 import UpcomingCommitments from "@/components/UpcomingCommitments";
+import { authFetch } from "@/lib/auth-fetch";
 import { CommitmentWithInstances } from "@/lib/types";
 
 export default function ExpensesPage() {
@@ -12,7 +13,7 @@ export default function ExpensesPage() {
 
   const fetchCommitments = useCallback(async () => {
     try {
-      const res = await fetch("/api/commitments");
+      const res = await authFetch("/api/commitments");
       const cmts = await res.json();
       setCommitments(cmts);
     } catch (err) {
@@ -27,7 +28,7 @@ export default function ExpensesPage() {
   }, [fetchCommitments]);
 
   const handleRollover = async (id: string, instanceDueDate: string) => {
-    await fetch("/api/commitments/rollover", {
+    await authFetch("/api/commitments/rollover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, instance_due_date: instanceDueDate }),
@@ -36,7 +37,7 @@ export default function ExpensesPage() {
   };
 
   const handleEditInstanceAmount = async (commitmentId: string, dueDate: string, newAmount: number) => {
-    await fetch("/api/commitment-instances", {
+    await authFetch("/api/commitment-instances", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commitment_id: commitmentId, due_date: dueDate, planned_amount: newAmount }),
@@ -45,7 +46,7 @@ export default function ExpensesPage() {
   };
 
   const handleLeftover = async (commitmentId: string, instanceDueDate: string, action: "rollover" | "release") => {
-    await fetch("/api/commitments/leftover", {
+    await authFetch("/api/commitments/leftover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commitment_id: commitmentId, instance_due_date: instanceDueDate, action }),

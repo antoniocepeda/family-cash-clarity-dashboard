@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { authFetch } from "@/lib/auth-fetch";
 import { LedgerEntry, LedgerItem } from "@/lib/types";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, isWithinInterval } from "date-fns";
 
@@ -41,7 +42,7 @@ export default function LedgerStatement({
   }, [accounts]);
 
   const fetchEntries = useCallback(() => {
-    fetch("/api/ledger")
+    authFetch("/api/ledger")
       .then((r) => r.json())
       .then((data) => {
         setEntries(data);
@@ -65,7 +66,7 @@ export default function LedgerStatement({
 
     setActionLoading(entry.id);
     try {
-      const res = await fetch(`/api/ledger/${entry.id}`, { method: "DELETE" });
+      const res = await authFetch(`/api/ledger/${entry.id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json();
         alert(data.error || "Failed to delete transaction");
@@ -103,7 +104,7 @@ export default function LedgerStatement({
 
     setActionLoading(editingId);
     try {
-      const res = await fetch(`/api/ledger/${editingId}`, {
+      const res = await authFetch(`/api/ledger/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
