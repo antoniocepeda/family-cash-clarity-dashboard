@@ -3,6 +3,7 @@
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { isAuthorizedEmail } from "@/lib/authorized-users";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 
 type AuthContextValue = {
@@ -24,10 +25,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const auth = getFirebaseAuth();
     return onAuthStateChanged(auth, (nextUser) => {
+      if (nextUser && !isAuthorizedEmail(nextUser.email)) {
+        void signOut(auth);
+        setUser(null);
+        setLoading(false);
+        router.replace("/login?error=unauthorized");
+        return;
+      }
+
       setUser(nextUser);
       setLoading(false);
     });
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (loading) return;

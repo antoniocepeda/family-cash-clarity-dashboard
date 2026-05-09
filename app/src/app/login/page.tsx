@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, ReactNode, Suspense, useState } from "react";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
+import { isAuthorizedEmail } from "@/lib/authorized-users";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 
 export default function LoginPage() {
@@ -22,6 +23,9 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   const next = searchParams.get("next") || "/";
+  const initialError = searchParams.get("error") === "unauthorized"
+    ? "That account is not authorized for this dashboard."
+    : "";
   const redirectAfterSignIn = () => {
     router.replace(next.startsWith("/") ? next : "/");
   };
@@ -32,10 +36,17 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+      const auth = getFirebaseAuth();
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      if (!isAuthorizedEmail(credential.user.email)) {
+        await signOut(auth);
+        throw new Error("unauthorized");
+      }
       redirectAfterSignIn();
-    } catch {
-      setError("Unable to sign in with that email and password.");
+    } catch (err) {
+      setError(err instanceof Error && err.message === "unauthorized"
+        ? "That account is not authorized for this dashboard."
+        : "Unable to sign in with that email and password.");
     } finally {
       setLoading(false);
     }
@@ -46,12 +57,19 @@ function LoginForm() {
     setLoading(true);
 
     try {
+      const auth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      await signInWithPopup(getFirebaseAuth(), provider);
+      const credential = await signInWithPopup(auth, provider);
+      if (!isAuthorizedEmail(credential.user.email)) {
+        await signOut(auth);
+        throw new Error("unauthorized");
+      }
       redirectAfterSignIn();
-    } catch {
-      setError("Unable to sign in with Google. Check that Google is enabled in Firebase Authentication.");
+    } catch (err) {
+      setError(err instanceof Error && err.message === "unauthorized"
+        ? "That account is not authorized for this dashboard."
+        : "Unable to sign in with Google. Check that Google is enabled in Firebase Authentication.");
     } finally {
       setLoading(false);
     }
@@ -108,9 +126,9 @@ function LoginForm() {
           />
         </div>
 
-        {error && (
+        {(error || initialError) && (
           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
+            {error || initialError}
           </p>
         )}
 

@@ -1,5 +1,6 @@
 import { DecodedIdToken } from "firebase-admin/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { isAuthorizedEmail } from "@/lib/authorized-users";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
 
 export type AuthedRequestContext = {
@@ -30,6 +31,9 @@ export function withAuth<Context extends object = object>(handler: AuthedHandler
     const user = await verifyAuthToken(req);
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!isAuthorizedEmail(user.email)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     return handler(req, { ...context, user });
