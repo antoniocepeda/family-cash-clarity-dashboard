@@ -6,3 +6,19 @@ runConfig:
   cpu: 1
   memoryMiB: 512
   concurrency: 80
+
+# Runtime-only Plaid credentials are loaded from Cloud Secret Manager.
+# Create these secrets before deploying the App Hosting backend.
+env:
+  - variable: PLAID_CLIENT_ID
+    secret: plaidClientId
+    availability:
+      - RUNTIME
+  - variable: PLAID_SECRET
+    secret: plaidSecret
+    availability:
+      - RUNTIME
+  - variable: PLAID_ENV
+    secret: plaidEnv
+    availability:
+      - RUNTIME

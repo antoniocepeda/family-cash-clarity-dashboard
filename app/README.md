@@ -22,7 +22,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 The Next.js app is nested in the `app/` directory. Running `npm run dev` from the repository root will fail because the root folder does not contain `package.json`.
 
-Copy `.env.local.example` to `.env.local` and fill in the browser Firebase config plus server-side Firebase Admin credentials for local development. Do not prefix Admin credentials or Plaid secrets with `NEXT_PUBLIC_`.
+Copy `.env.local.example` to `.env.local` and fill in the browser Firebase config plus server-side Firebase Admin credentials for local development. Add Plaid values there only for local development. Do not prefix Admin credentials or Plaid secrets with `NEXT_PUBLIC_`.
 
 ## Useful Commands
 
@@ -59,6 +59,36 @@ firebase apphosting:backends:create --project <firebase-project-id>
 ```
 
 When prompted for the app root directory, enter `app`.
+
+### Plaid Secrets
+
+Plaid credentials are server-only runtime secrets. Local development reads them from `app/.env.local`; deployed Firebase App Hosting/Cloud Run instances read them from Cloud Secret Manager through `app/apphosting.yaml`.
+
+Required environment variables:
+
+```text
+PLAID_CLIENT_ID
+PLAID_SECRET
+PLAID_ENV
+```
+
+Create the App Hosting secrets before deploying:
+
+```bash
+firebase apphosting:secrets:set plaidClientId --project <firebase-project-id>
+firebase apphosting:secrets:set plaidSecret --project <firebase-project-id>
+firebase apphosting:secrets:set plaidEnv --project <firebase-project-id>
+```
+
+Set `plaidEnv` to `sandbox`, `development`, or `production`. If you create or manage the secrets directly in Google Cloud Secret Manager instead, grant the App Hosting backend/service account access to each secret, for example with:
+
+```bash
+firebase apphosting:secrets:grantaccess plaidClientId --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess plaidSecret --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess plaidEnv --project <firebase-project-id>
+```
+
+Redeploy the App Hosting backend after creating or rotating these secrets. Plaid secrets must not be committed, logged, returned from API routes, or imported into client components.
 
 ## Firestore Data
 

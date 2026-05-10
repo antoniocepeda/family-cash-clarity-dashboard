@@ -28,14 +28,24 @@ export async function verifyAuthToken(req: NextRequest): Promise<DecodedIdToken 
 
 export function withAuth<Context extends object = object>(handler: AuthedHandler<Context>) {
   return async function authedRoute(req: NextRequest, context?: Context) {
-    const user = await verifyAuthToken(req);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!isAuthorizedEmail(user.email)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    try {
+      const user = await verifyAuthToken(req);
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      if (!isAuthorizedEmail(user.email)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
 
-    return handler(req, { ...(context ?? ({} as Context)), user });
+      return await handler(req, { ...(context ?? ({} as Context)), user });
+    } catch (err) {
+      console.error("Authenticated API route failed:", {
+        method: req.method,
+        path: new URL(req.url).pathname,
+        error: err instanceof Error ? err.message : String(err),
+      });
+
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
   };
 }
