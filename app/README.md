@@ -50,7 +50,19 @@ When creating the App Hosting backend in the Firebase console or CLI, set the re
 app
 ```
 
-App Hosting will install dependencies, run `npm run build`, and serve the Next.js app on Cloud Run. Do not add a static Firebase Hosting rewrite for this app unless the API routes are moved elsewhere.
+App Hosting detects `package-lock.json`, installs dependencies with `npm ci`, runs `npm run build`, and serves the app through Firebase's managed Next.js runtime on Cloud Run. Do not add a static Firebase Hosting rewrite for this app unless the API routes are moved elsewhere.
+
+Production deployments should connect App Hosting to:
+
+```text
+GitHub repo: antoniocepeda/family-cash-clarity-dashboard
+Live branch: main
+App root directory: app
+Build command: npm run build
+Install command: npm ci
+```
+
+After that connection is in place, pushes to GitHub `main` trigger production rollouts automatically.
 
 For CLI setup:
 
@@ -60,11 +72,21 @@ firebase apphosting:backends:create --project <firebase-project-id>
 
 When prompted for the app root directory, enter `app`.
 
-### Plaid Secrets
+### Required App Hosting Values
 
-Plaid credentials are server-only runtime secrets. Local development reads them from `app/.env.local`; deployed Firebase App Hosting/Cloud Run instances read them from Cloud Secret Manager through `app/apphosting.yaml`.
+Local development reads values from `app/.env.local`; deployed Firebase App Hosting/Cloud Run instances read them from Cloud Secret Manager through `app/apphosting.yaml`.
 
-Required environment variables:
+Required build/runtime values:
+
+```text
+NEXT_PUBLIC_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_APP_ID
+NEXT_PUBLIC_AUTHORIZED_EMAILS
+```
+
+Required runtime-only Plaid secrets:
 
 ```text
 PLAID_CLIENT_ID
@@ -72,7 +94,17 @@ PLAID_SECRET
 PLAID_ENV
 ```
 
-Create the App Hosting secrets before deploying:
+Create the App Hosting value sources before deploying:
+
+```bash
+firebase apphosting:secrets:set firebaseApiKey --project <firebase-project-id>
+firebase apphosting:secrets:set firebaseAuthDomain --project <firebase-project-id>
+firebase apphosting:secrets:set firebaseProjectId --project <firebase-project-id>
+firebase apphosting:secrets:set firebaseAppId --project <firebase-project-id>
+firebase apphosting:secrets:set authorizedEmails --project <firebase-project-id>
+```
+
+Create the Plaid secrets before deploying:
 
 ```bash
 firebase apphosting:secrets:set plaidClientId --project <firebase-project-id>
@@ -80,15 +112,38 @@ firebase apphosting:secrets:set plaidSecret --project <firebase-project-id>
 firebase apphosting:secrets:set plaidEnv --project <firebase-project-id>
 ```
 
-Set `plaidEnv` to `sandbox`, `development`, or `production`. If you create or manage the secrets directly in Google Cloud Secret Manager instead, grant the App Hosting backend/service account access to each secret, for example with:
+Set `plaidEnv` to `sandbox`, `development`, or `production`. If you create or manage any values directly in Google Cloud Secret Manager instead, grant the App Hosting backend/service account access to each secret, for example with:
 
 ```bash
+firebase apphosting:secrets:grantaccess firebaseApiKey --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess firebaseAuthDomain --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess firebaseProjectId --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess firebaseAppId --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess authorizedEmails --project <firebase-project-id>
 firebase apphosting:secrets:grantaccess plaidClientId --project <firebase-project-id>
 firebase apphosting:secrets:grantaccess plaidSecret --project <firebase-project-id>
 firebase apphosting:secrets:grantaccess plaidEnv --project <firebase-project-id>
 ```
 
-Redeploy the App Hosting backend after creating or rotating these secrets. Plaid secrets must not be committed, logged, returned from API routes, or imported into client components.
+Redeploy the App Hosting backend after creating or rotating these values. Plaid secrets must not be committed, logged, returned from API routes, or imported into client components. `NEXT_PUBLIC_*` values are included in the browser bundle and should not contain confidential credentials.
+
+### Firebase Console Checklist
+
+Some production setup must be completed in Firebase Console or through an authenticated Firebase CLI session:
+
+1. Confirm the Firebase project exists and billing is enabled. App Hosting requires a billing-enabled project.
+2. Enable Firebase App Hosting for the project.
+3. Create an App Hosting backend connected to GitHub repository `antoniocepeda/family-cash-clarity-dashboard`.
+4. Grant Firebase access to the GitHub repository if prompted during the connection flow.
+5. Set the app root directory to `app`.
+6. Set the live branch to `main` so pushes to `main` automatically deploy.
+7. Create/grant the App Hosting secrets listed above.
+8. Trigger a rollout from the latest `main` commit.
+9. Verify the deployed URL loads the dashboard and that authenticated API routes respond in the deployed environment.
+
+### Preview Deployments
+
+Keep the first App Hosting backend focused on stable production deploys from `main`. After production rollouts are consistently healthy, add preview deployments for pull requests or non-production branches using a separate preview backend or App Hosting preview workflow with the same `app` root, `npm ci`, `npm run build`, and non-production Firebase/Plaid values.
 
 ## Firestore Data
 

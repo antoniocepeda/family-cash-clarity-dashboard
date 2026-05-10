@@ -1,5 +1,8 @@
 # Firebase App Hosting configuration for the Next.js app in this directory.
 # The App Hosting backend should use "app" as the repo-relative root directory.
+# App Hosting detects package-lock.json and installs with npm ci, then runs:
+#   npm run build
+# The production server is provided by App Hosting's managed Next.js runtime.
 runConfig:
   maxInstances: 10
   minInstances: 0
@@ -7,9 +10,36 @@ runConfig:
   memoryMiB: 512
   concurrency: 80
 
-# Runtime-only Plaid credentials are loaded from Cloud Secret Manager.
-# Create these secrets before deploying the App Hosting backend.
+# Build/runtime configuration is loaded from Cloud Secret Manager so no
+# environment-specific values are committed. NEXT_PUBLIC_* values are embedded
+# into the browser bundle at build time, so treat their secret entries as a
+# deployment value source, not as confidential once deployed.
 env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: firebaseApiKey
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    secret: firebaseAuthDomain
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    secret: firebaseProjectId
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    secret: firebaseAppId
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_AUTHORIZED_EMAILS
+    secret: authorizedEmails
+    availability:
+      - BUILD
+      - RUNTIME
   - variable: PLAID_CLIENT_ID
     secret: plaidClientId
     availability:
