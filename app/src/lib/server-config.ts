@@ -10,11 +10,18 @@ export type PlaidServerConfig = {
   env: PlaidEnvironment;
 };
 
+export class PlaidConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlaidConfigurationError";
+  }
+}
+
 function readRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
 
   if (!value) {
-    throw new Error(`Missing required server environment variable: ${name}`);
+    throw new PlaidConfigurationError(`Missing required server environment variable: ${name}`);
   }
 
   return value;
@@ -24,7 +31,7 @@ function readPlaidEnv(): PlaidEnvironment {
   const value = readRequiredEnv("PLAID_ENV");
 
   if (!PLAID_ENVS.includes(value as PlaidEnvironment)) {
-    throw new Error(
+    throw new PlaidConfigurationError(
       `Invalid PLAID_ENV value. Expected one of: ${PLAID_ENVS.join(", ")}`,
     );
   }
