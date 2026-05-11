@@ -293,9 +293,11 @@ export async function listInstances(userId: string): Promise<CommitmentInstance[
 export async function listInstancesForCommitment(userId: string, commitmentId: string, endDate: string) {
   const snap = await collection(userId, COLLECTIONS.commitmentInstances)
     .where("commitment_id", "==", commitmentId)
-    .where("due_date", "<=", endDate)
     .get();
-  return snap.docs.map((d) => normalizeInstance(d.id, d.data())).sort((a, b) => a.due_date.localeCompare(b.due_date));
+  return snap.docs
+    .map((d) => normalizeInstance(d.id, d.data()))
+    .filter((i) => i.due_date <= endDate)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 }
 
 async function setInstanceAmounts(

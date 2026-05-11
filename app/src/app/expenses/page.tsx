@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Nav from "@/components/Nav";
 import UpcomingCommitments from "@/components/UpcomingCommitments";
+import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { CommitmentWithInstances } from "@/lib/types";
 
@@ -14,7 +15,7 @@ export default function ExpensesPage() {
   const fetchCommitments = useCallback(async () => {
     try {
       const res = await authFetch("/api/commitments");
-      const cmts = await res.json();
+      const cmts = await readJsonArray<CommitmentWithInstances>(res, "Commitments fetch");
       setCommitments(cmts);
     } catch (err) {
       console.error("Failed to fetch expenses:", err);

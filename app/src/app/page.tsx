@@ -7,6 +7,7 @@ import NextBills from "@/components/NextBills";
 import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
+import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { Account, CommitmentWithInstances, AllocationInput, LedgerItemInput, ProjectionDay, Alert } from "@/lib/types";
 
@@ -23,7 +24,7 @@ export default function Dashboard() {
     const params = new URLSearchParams();
     params.set("days", String(days ?? projectionDays));
     const res = await authFetch(`/api/projections?${params.toString()}`);
-    return res.json();
+    return readJsonArray<ProjectionDay>(res, "Projection fetch");
   }, [projectionDays]);
 
   const fetchAll = useCallback(async () => {
@@ -35,9 +36,9 @@ export default function Dashboard() {
         authFetch("/api/alerts"),
       ]);
       const [accts, cmts, alts] = await Promise.all([
-        acctRes.json(),
-        cmtRes.json(),
-        alertRes.json(),
+        readJsonArray<Account>(acctRes, "Accounts fetch"),
+        readJsonArray<CommitmentWithInstances>(cmtRes, "Commitments fetch"),
+        readJsonArray<Alert>(alertRes, "Alerts fetch"),
       ]);
       setAccounts(accts);
       setCommitments(cmts);
