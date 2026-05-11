@@ -13,6 +13,9 @@ import {
   LedgerEntry,
   LedgerItem,
   LedgerItemInput,
+  PlaidAccount,
+  PlaidItem,
+  PlaidStatus,
 } from "@/lib/types";
 
 export const COLLECTIONS = {
@@ -62,6 +65,8 @@ function normalizeAccount(id: string, data: FirebaseFirestore.DocumentData): Acc
     current_balance: Number(data.current_balance ?? data.currentBalance ?? 0),
     is_reserve: isTruthyNumber(data.is_reserve ?? data.isReserve),
     updated_at: String(data.updated_at ?? data.updatedAt ?? new Date().toISOString()),
+    plaid_account_id: (data.plaid_account_id ?? data.plaidAccountId ?? null) as string | null,
+    plaid_item_id: (data.plaid_item_id ?? data.plaidItemId ?? null) as string | null,
   };
 }
 
@@ -111,6 +116,44 @@ function normalizeLedger(id: string, data: FirebaseFirestore.DocumentData): Ledg
     account_id: String(data.account_id ?? data.accountId ?? ""),
     commitment_id: (data.commitment_id ?? data.commitmentId ?? null) as string | null,
     created_at: String(data.created_at ?? data.createdAt ?? new Date().toISOString()),
+    plaid_transaction_id: (data.plaid_transaction_id ?? data.plaidTransactionId ?? null) as string | null,
+    pending: Boolean(data.pending ?? false),
+    removed: Boolean(data.removed ?? false),
+  };
+}
+
+function normalizePlaidItem(id: string, data: FirebaseFirestore.DocumentData): PlaidItem {
+  return {
+    id,
+    item_id: String(data.item_id ?? id),
+    institution_id: (data.institution_id ?? null) as string | null,
+    institution_name: (data.institution_name ?? null) as string | null,
+    available_products: Array.isArray(data.available_products) ? data.available_products : [],
+    billed_products: Array.isArray(data.billed_products) ? data.billed_products : [],
+    status: (data.status ?? "connected") as PlaidItem["status"],
+    error_code: (data.error_code ?? null) as string | null,
+    error_message: (data.error_message ?? null) as string | null,
+    created_at: String(data.created_at ?? data.createdAt ?? new Date().toISOString()),
+    updated_at: String(data.updated_at ?? data.updatedAt ?? new Date().toISOString()),
+    last_synced_at: (data.last_synced_at ?? null) as string | null,
+  };
+}
+
+function normalizePlaidAccount(id: string, data: FirebaseFirestore.DocumentData): PlaidAccount {
+  return {
+    id,
+    plaid_account_id: String(data.plaid_account_id ?? id),
+    plaid_item_id: String(data.plaid_item_id ?? ""),
+    app_account_id: String(data.app_account_id ?? ""),
+    name: String(data.name ?? ""),
+    official_name: (data.official_name ?? null) as string | null,
+    mask: (data.mask ?? null) as string | null,
+    type: String(data.type ?? ""),
+    subtype: (data.subtype ?? null) as string | null,
+    current_balance: Number(data.current_balance ?? 0),
+    available_balance: data.available_balance === undefined || data.available_balance === null ? null : Number(data.available_balance),
+    iso_currency_code: (data.iso_currency_code ?? null) as string | null,
+    updated_at: String(data.updated_at ?? data.updatedAt ?? new Date().toISOString()),
   };
 }
 
@@ -481,6 +524,219 @@ export async function deleteLedger(userId: string, id: string) {
   await adjustAccountBalance(userId, existing.account_id, -(existing.type === "income" ? existing.amount : -existing.amount));
   await existingSnap.ref.delete();
   return true;
+}
+
+export async function getPlaidStatus(userId: string): Promise<PlaidStatus> {
+  const [itemsSnap, accountsSnap] = await Promise.all([
+    collection(userId, COLLECTIONS.plaidItems).orderBy("created_at").get(),
+    collection(userId, COLLECTIONS.plaidAccounts).orderBy("name").get(),
+  ]);
+
+  return {
+    items: itemsSnap.docs.map((d) => normalizePlaidItem(d.id, d.data())),
+    accounts: accountsSnap.docs.map((d) => normalizePlaidAccount(d.id, d.data())),
+  };
+}
+
+export async function savePlaidItem(
+  userId: string,
+  input: {
+    itemId: string;
+    encryptedAccessToken: string;
+    institutionId?: string | null;
+    institutionName?: string | null;
+    availableProducts?: string[];
+    billedProducts?: string[];
+  }
+) {
+  await collection(userId, COLLECTIONS.plaidItems).doc(input.itemId).set(
+    {
+      ...stampCreate(userId),
+      item_id: input.itemId,
+      encrypted_access_token: input.encryptedAccessToken,
+      institution_id: input.institutionId ?? null,
+      institution_name: input.institutionName ?? null,
+      available_products: input.availableProducts ?? [],
+      billed_products: input.billedProducts ?? [],
+      status: "connected",
+      error_code: null,
+      error_message: null,
+      last_synced_at: null,
+    },
+    { merge: true }
+  );
+}
+
+export async function listPlaidItemsWithTokens(userId: string) {
+  const snap = await collection(userId, COLLECTIONS.plaidItems).get();
+  return snap.docs.map((d) => ({
+    ...normalizePlaidItem(d.id, d.data()),
+    encrypted_access_token: String(d.data().encrypted_access_token ?? ""),
+  }));
+}
+
+export async function getPlaidCursor(userId: string, itemId: string) {
+  const snap = await collection(userId, COLLECTIONS.plaidSync).doc(itemId).get();
+  return snap.exists ? ((snap.data()?.cursor ?? null) as string | null) : null;
+}
+
+export async function savePlaidSyncState(userId: string, itemId: string, cursor: string | null) {
+  await collection(userId, COLLECTIONS.plaidSync).doc(itemId).set(
+    {
+      ...stampUpdate(),
+      item_id: itemId,
+      cursor,
+      last_synced_at: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  await collection(userId, COLLECTIONS.plaidItems).doc(itemId).set(
+    { ...stampUpdate(), last_synced_at: new Date().toISOString(), status: "connected", error_code: null, error_message: null },
+    { merge: true }
+  );
+}
+
+export async function markPlaidItemError(userId: string, itemId: string, code: string, message: string) {
+  await collection(userId, COLLECTIONS.plaidItems).doc(itemId).set(
+    { ...stampUpdate(), status: "error", error_code: code, error_message: message },
+    { merge: true }
+  );
+}
+
+function mapPlaidAccountType(type?: string | null, subtype?: string | null): Account["type"] {
+  if (type === "credit") return "credit";
+  if (subtype === "savings") return "savings";
+  return "checking";
+}
+
+export async function upsertPlaidAccount(
+  userId: string,
+  input: {
+    plaidAccountId: string;
+    plaidItemId: string;
+    name: string;
+    officialName?: string | null;
+    mask?: string | null;
+    type?: string | null;
+    subtype?: string | null;
+    currentBalance: number;
+    availableBalance?: number | null;
+    isoCurrencyCode?: string | null;
+  }
+) {
+  const plaidRef = collection(userId, COLLECTIONS.plaidAccounts).doc(input.plaidAccountId);
+  const existingPlaid = await plaidRef.get();
+  let appAccountId = existingPlaid.exists ? String(existingPlaid.data()?.app_account_id ?? "") : "";
+
+  if (!appAccountId) {
+    const existingMapped = await collection(userId, COLLECTIONS.accounts)
+      .where("plaid_account_id", "==", input.plaidAccountId)
+      .limit(1)
+      .get();
+    appAccountId = existingMapped.docs[0]?.id ?? "";
+  }
+
+  if (!appAccountId) {
+    const byName = await collection(userId, COLLECTIONS.accounts)
+      .where("name", "==", input.name)
+      .limit(1)
+      .get();
+    appAccountId = byName.docs[0]?.id ?? randomUUID();
+  }
+
+  const appAccountExists = (await collection(userId, COLLECTIONS.accounts).doc(appAccountId).get()).exists;
+  await collection(userId, COLLECTIONS.accounts).doc(appAccountId).set(
+    {
+      ...(appAccountExists ? stampUpdate() : { ...stampCreate(userId), is_reserve: 0, isReserve: false }),
+      name: input.name,
+      type: mapPlaidAccountType(input.type, input.subtype),
+      current_balance: input.currentBalance,
+      currentBalance: input.currentBalance,
+      plaid_account_id: input.plaidAccountId,
+      plaidAccountId: input.plaidAccountId,
+      plaid_item_id: input.plaidItemId,
+      plaidItemId: input.plaidItemId,
+    },
+    { merge: true }
+  );
+
+  await plaidRef.set(
+    {
+      ...stampUpdate(),
+      ownerId: userId,
+      plaid_account_id: input.plaidAccountId,
+      plaid_item_id: input.plaidItemId,
+      app_account_id: appAccountId,
+      name: input.name,
+      official_name: input.officialName ?? null,
+      mask: input.mask ?? null,
+      type: input.type ?? null,
+      subtype: input.subtype ?? null,
+      current_balance: input.currentBalance,
+      available_balance: input.availableBalance ?? null,
+      iso_currency_code: input.isoCurrencyCode ?? null,
+    },
+    { merge: true }
+  );
+
+  return appAccountId;
+}
+
+export async function upsertPlaidLedgerTransaction(
+  userId: string,
+  input: {
+    plaidTransactionId: string;
+    plaidAccountId: string;
+    appAccountId: string;
+    date: string;
+    name: string;
+    amount: number;
+    pending: boolean;
+  }
+) {
+  const existing = await collection(userId, COLLECTIONS.ledger)
+    .where("plaid_transaction_id", "==", input.plaidTransactionId)
+    .limit(1)
+    .get();
+  const id = existing.docs[0]?.id ?? randomUUID();
+  const existingData = existing.docs[0]?.data();
+  const signedAmount = Math.abs(input.amount);
+  const type: LedgerEntry["type"] = input.amount < 0 ? "income" : "expense";
+
+  await collection(userId, COLLECTIONS.ledger).doc(id).set(
+    {
+      ...(existingData ? stampUpdate() : stampCreate(userId)),
+      date: input.date,
+      description: input.name,
+      amount: signedAmount,
+      type,
+      account_id: input.appAccountId,
+      accountId: input.appAccountId,
+      commitment_id: existingData?.commitment_id ?? null,
+      commitmentId: existingData?.commitmentId ?? null,
+      plaid_transaction_id: input.plaidTransactionId,
+      plaidTransactionId: input.plaidTransactionId,
+      plaid_account_id: input.plaidAccountId,
+      pending: input.pending,
+      removed: false,
+      source: "plaid",
+    },
+    { merge: true }
+  );
+
+  return existing.empty ? "added" : "modified";
+}
+
+export async function markPlaidLedgerTransactionRemoved(userId: string, plaidTransactionId: string) {
+  const snap = await collection(userId, COLLECTIONS.ledger)
+    .where("plaid_transaction_id", "==", plaidTransactionId)
+    .get();
+  await Promise.all(
+    snap.docs.map((d) =>
+      d.ref.set({ ...stampUpdate(), removed: true, removed_at: new Date().toISOString() }, { merge: true })
+    )
+  );
+  return snap.size;
 }
 
 export async function resetUserData(userId: string) {

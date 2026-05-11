@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { usePlaidLink } from "react-plaid-link";
 import Nav from "@/components/Nav";
+import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { Account, Commitment } from "@/lib/types";
+import { Account, Commitment, PlaidStatus } from "@/lib/types";
 
 type Tab = "accounts" | "commitments" | "help";
 
@@ -11,15 +13,18 @@ export default function ManagePage() {
   const [tab, setTab] = useState<Tab>("accounts");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [plaidStatus, setPlaidStatus] = useState<PlaidStatus>({ items: [], accounts: [] });
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    const [acctRes, cmtRes] = await Promise.all([
+    const [acctRes, cmtRes, plaidRes] = await Promise.all([
       authFetch("/api/accounts"),
       authFetch("/api/commitments"),
+      authFetch("/api/plaid/sync"),
     ]);
-    setAccounts(await acctRes.json());
-    setCommitments(await cmtRes.json());
+    setAccounts(await readJsonArray<Account>(acctRes, "Accounts fetch"));
+    setCommitments(await readJsonArray<Commitment>(cmtRes, "Commitments fetch"));
+    setPlaidStatus(await plaidRes.json());
     setLoading(false);
   }, []);
 
@@ -75,7 +80,7 @@ export default function ManagePage() {
         </div>
 
         {tab === "accounts" && (
-          <AccountsManager accounts={accounts} onRefresh={fetchData} />
+          <AccountsManager accounts={accounts} plaidStatus={plaidStatus} onRefresh={fetchData} />
         )}
         {tab === "commitments" && (
           <CommitmentsManager commitments={commitments} accounts={accounts} onRefresh={fetchData} />
@@ -92,9 +97,11 @@ export default function ManagePage() {
 
 function AccountsManager({
   accounts,
+  plaidStatus,
   onRefresh,
 }: {
   accounts: Account[];
+  plaidStatus: PlaidStatus;
   onRefresh: () => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -106,6 +113,48 @@ function AccountsManager({
     current_balance: "",
     is_reserve: false,
   });
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [plaidMessage, setPlaidMessage] = useState<string | null>(null);
+  const [plaidError, setPlaidError] = useState<string | null>(null);
+  const [plaidBusy, setPlaidBusy] = useState(false);
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: async (public_token, metadata) => {
+      setPlaidBusy(true);
+      setPlaidError(null);
+      setPlaidMessage("Connecting bank...");
+      try {
+        const exchange = await authFetch("/api/plaid/exchange-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ public_token, metadata }),
+        });
+        if (!exchange.ok) throw new Error((await exchange.json()).error || "Bank connection failed");
+
+        const sync = await authFetch("/api/plaid/sync", { method: "POST" });
+        if (!sync.ok && sync.status !== 207) throw new Error((await sync.json()).error || "Bank sync failed");
+        setPlaidMessage("Bank connected. Accounts and transactions were synced.");
+        setLinkToken(null);
+        onRefresh();
+      } catch (err) {
+        setPlaidError(err instanceof Error ? err.message : "Bank connection failed");
+      } finally {
+        setPlaidBusy(false);
+      }
+    },
+    onExit: (err) => {
+      if (err) {
+        setPlaidError(err.display_message || err.error_message || "Plaid Link was closed before completing.");
+      }
+      setLinkToken(null);
+      setPlaidBusy(false);
+    },
+  });
+
+  useEffect(() => {
+    if (linkToken && ready) open();
+  }, [linkToken, open, ready]);
 
   const startEdit = (acct: Account) => {
     setEditing(acct.id);
@@ -144,17 +193,99 @@ function AccountsManager({
     onRefresh();
   };
 
+  const connectBank = async () => {
+    setPlaidBusy(true);
+    setPlaidError(null);
+    setPlaidMessage(null);
+    try {
+      const res = await authFetch("/api/plaid/link-token", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not start Plaid Link");
+      setLinkToken(data.link_token);
+    } catch (err) {
+      setPlaidError(err instanceof Error ? err.message : "Could not start Plaid Link");
+      setPlaidBusy(false);
+    }
+  };
+
+  const syncBankData = async () => {
+    setPlaidBusy(true);
+    setPlaidError(null);
+    setPlaidMessage("Syncing bank data...");
+    try {
+      const res = await authFetch("/api/plaid/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok && res.status !== 207) throw new Error(data.error || "Bank sync failed");
+      if (data.errors?.length) {
+        setPlaidError(`Synced with ${data.errors.length} item error${data.errors.length === 1 ? "" : "s"}.`);
+      } else {
+        setPlaidMessage(`Synced ${data.accounts} accounts, ${data.added} new transactions, ${data.modified} updates, ${data.removed} removals.`);
+      }
+      onRefresh();
+    } catch (err) {
+      setPlaidError(err instanceof Error ? err.message : "Bank sync failed");
+    } finally {
+      setPlaidBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-slate-800">Accounts</h2>
-        <button
-          onClick={() => setAdding(!adding)}
-          className="text-sm font-medium text-sky-600 hover:text-sky-800 transition-colors"
-        >
-          {adding ? "Cancel" : "+ Add Account"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={connectBank}
+            disabled={plaidBusy}
+            className="px-3 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
+          >
+            Connect Bank
+          </button>
+          <button
+            onClick={syncBankData}
+            disabled={plaidBusy || plaidStatus.items.length === 0}
+            className="px-3 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50 transition-colors"
+          >
+            Sync Bank Data
+          </button>
+          <button
+            onClick={() => setAdding(!adding)}
+            className="px-3 py-2 text-sm font-medium text-sky-600 hover:text-sky-800 transition-colors"
+          >
+            {adding ? "Cancel" : "+ Add Account"}
+          </button>
+        </div>
       </div>
+
+      {(plaidMessage || plaidError || plaidStatus.items.length > 0) && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Linked banks</h3>
+              <p className="text-xs text-slate-500">{plaidStatus.items.length} institutions &middot; {plaidStatus.accounts.length} linked accounts</p>
+            </div>
+            {plaidBusy && <span className="text-xs font-medium text-slate-500">Working...</span>}
+          </div>
+          {plaidMessage && <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{plaidMessage}</p>}
+          {plaidError && <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{plaidError}</p>}
+          {plaidStatus.items.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {plaidStatus.items.map((item) => (
+                <div key={item.item_id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-slate-800">{item.institution_name || "Linked institution"}</span>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${item.status === "connected" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{item.status}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {item.last_synced_at ? `Last synced ${new Date(item.last_synced_at).toLocaleString()}` : "Not synced yet"}
+                  </p>
+                  {item.error_message && <p className="mt-1 text-xs text-red-600">{item.error_message}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {adding && (
         <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-3">

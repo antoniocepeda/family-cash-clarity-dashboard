@@ -5,6 +5,8 @@ export interface Account {
   current_balance: number;
   is_reserve: number;
   updated_at: string;
+  plaid_account_id?: string | null;
+  plaid_item_id?: string | null;
 }
 
 export interface Commitment {
@@ -59,8 +61,47 @@ export interface LedgerEntry {
   account_id: string;
   commitment_id: string | null;
   created_at: string;
+  plaid_transaction_id?: string | null;
+  pending?: boolean;
+  removed?: boolean;
   allocations?: CommitmentAllocation[];
   items?: LedgerItem[];
+}
+
+export interface PlaidItem {
+  id: string;
+  item_id: string;
+  institution_id: string | null;
+  institution_name: string | null;
+  available_products: string[];
+  billed_products: string[];
+  status: "connected" | "error";
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  last_synced_at: string | null;
+}
+
+export interface PlaidAccount {
+  id: string;
+  plaid_account_id: string;
+  plaid_item_id: string;
+  app_account_id: string;
+  name: string;
+  official_name: string | null;
+  mask: string | null;
+  type: string;
+  subtype: string | null;
+  current_balance: number;
+  available_balance: number | null;
+  iso_currency_code: string | null;
+  updated_at: string;
+}
+
+export interface PlaidStatus {
+  items: PlaidItem[];
+  accounts: PlaidAccount[];
 }
 
 export interface CommitmentInstance {

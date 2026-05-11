@@ -166,6 +166,10 @@ users/{userId}/plaidSync/{itemId}
 
 Each persisted document includes stable `createdAt` and `updatedAt` fields. Existing API responses keep the app's snake_case fields for UI compatibility.
 
+Plaid access tokens are stored only under `users/{userId}/plaidItems/{itemId}.encrypted_access_token`. The browser never receives this field. The server encrypts the token before persistence and decrypts it only inside authenticated Plaid API routes.
+
+Plaid sync maps remote accounts into existing `accounts` documents by `plaid_account_id`, then by exact account name, and creates a new app account only when no match exists. Account balances are updated from Plaid while manual account fields such as reserve status are preserved. Imported transactions are stored in `users/{userId}/ledger` with `source: "plaid"` and `plaid_transaction_id`; repeated syncs update the same ledger document instead of creating duplicates. Plaid removals mark matching ledger rows with `removed: true`.
+
 Deploy `firestore.rules` to enforce `request.auth.uid == userId` document scoping for any direct client Firestore access. The current app primarily accesses Firestore through authenticated server API routes.
 
 For local Admin access, either use Application Default Credentials:
@@ -175,6 +179,34 @@ gcloud auth application-default login
 ```
 
 or set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` in `.env.local`.
+
+## Plaid Setup
+
+Create a Plaid app in the Plaid Dashboard and add the redirect/deployed app domains that will open Plaid Link. For local development, keep:
+
+```text
+PLAID_ENV=sandbox
+PLAID_CLIENT_ID=<Plaid client id>
+PLAID_SECRET=<Plaid sandbox secret>
+```
+
+The Manage Data account tab includes:
+
+- `Connect Bank`: creates a server-side Link token, opens Plaid Link in the browser, and sends only the returned `public_token` to `/api/plaid/exchange-token`.
+- `Sync Bank Data`: calls `/api/plaid/sync`, which reads encrypted access tokens server-side, refreshes accounts/balances, and imports transaction sync changes.
+
+For sandbox testing, select a Plaid sandbox institution such as `First Platypus Bank` in Link and use Plaid's sandbox credentials (`user_good` / `pass_good`) plus any prompted MFA code shown by Plaid's sandbox flow. No live bank credentials are required.
+
+Plaid routes:
+
+```text
+POST /api/plaid/link-token      Creates a user-scoped Plaid Link token.
+POST /api/plaid/exchange-token  Exchanges a public token server-side and stores encrypted item metadata.
+GET  /api/plaid/sync            Returns linked bank/account status without token fields.
+POST /api/plaid/sync            Syncs Plaid accounts, balances, transactions, cursors, updates, and removals.
+```
+
+To switch from sandbox/trial to production, request Production access in the Plaid Dashboard, configure production redirect/application domains, rotate `PLAID_SECRET` to the production secret, set `PLAID_ENV=production`, and redeploy. Existing sandbox Items cannot be promoted; users must reconnect banks against the production environment.
 
 ## Project Layout
 
