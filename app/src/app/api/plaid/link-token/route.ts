@@ -32,6 +32,30 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
       );
     }
 
+    if (typeof err === "object" && err !== null && "response" in err) {
+      const plaidError = err as {
+        response?: { status?: number; data?: { error_code?: string; error_message?: string } };
+      };
+      const errorCode = plaidError.response?.data?.error_code;
+      const errorMessage = plaidError.response?.data?.error_message;
+
+      console.error("Plaid link token error:", {
+        status: plaidError.response?.status,
+        errorCode,
+        errorMessage,
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            errorMessage ||
+            "Plaid rejected the Link token request. Check that PLAID_ENV matches the configured Plaid secret.",
+          code: errorCode,
+        },
+        { status: plaidError.response?.status === 400 ? 400 : 502 },
+      );
+    }
+
     throw err;
   }
 }
