@@ -502,10 +502,10 @@ export async function listRecurringCommitmentsForTrends(userId: string, commitme
 export async function listInstancesForTrendPeriod(userId: string, commitmentId: string, start: string, end: string) {
   const snap = await collection(userId, COLLECTIONS.commitmentInstances)
     .where("commitment_id", "==", commitmentId)
-    .where("due_date", ">=", start)
-    .where("due_date", "<=", end)
     .get();
-  return snap.docs.map((d) => normalizeInstance(d.id, d.data()));
+  return snap.docs
+    .map((d) => normalizeInstance(d.id, d.data()))
+    .filter((i) => i.due_date >= start && i.due_date <= end);
 }
 
 export async function markCommitmentPaid(userId: string, id: string, actualAmount: number, instanceDueDate?: string, note?: string, accountIdOverride?: string) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import {
   BarChart,
@@ -51,14 +52,18 @@ export default function SpendingTrends() {
     });
 
     authFetch(`/api/trends?${params.toString()}`)
-      .then((r) => r.json())
+      .then((r) => readJsonArray<CommitmentTrend>(r, "Trends fetch"))
       .then((data) => {
         if (cancelled) return;
         setTrends(data);
         setLoading(false);
       })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
+      .catch((err) => {
+        console.error("Failed to fetch trends:", err);
+        if (!cancelled) {
+          setTrends([]);
+          setLoading(false);
+        }
       });
 
     return () => {
