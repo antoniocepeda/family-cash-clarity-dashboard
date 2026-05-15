@@ -398,6 +398,11 @@ export default function LedgerStatement({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-medium text-slate-800">{entry.description}</span>
+                              {entry.pending && (
+                                <span className="inline-flex text-[10px] font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
+                                  Pending
+                                </span>
+                              )}
                               {isBillPayment && (
                                 <span className="inline-flex text-[10px] font-semibold bg-sky-50 text-sky-600 px-1.5 py-0.5 rounded">
                                   Bill Payment

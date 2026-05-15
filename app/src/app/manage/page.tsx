@@ -219,7 +219,9 @@ function AccountsManager({
       if (data.errors?.length) {
         setPlaidError(`Synced with ${data.errors.length} item error${data.errors.length === 1 ? "" : "s"}.`);
       } else {
-        setPlaidMessage(`Synced ${data.accounts} accounts, ${data.added} new transactions, ${data.modified} updates, ${data.removed} removals.`);
+        setPlaidMessage(
+          `Synced ${data.accounts} accounts, ${data.added} new transactions, ${data.modified} updates, ${data.removed} removals, ${data.pending ?? 0} pending.`
+        );
       }
       onRefresh();
     } catch (err) {

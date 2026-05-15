@@ -29,6 +29,7 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
     added: 0,
     modified: 0,
     removed: 0,
+    pending: 0,
     errors: [] as { item_id: string; error: string }[],
   };
 
@@ -77,6 +78,7 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
             amount: Number(transaction.amount),
             pending: transaction.pending,
           });
+          if (transaction.pending) summary.pending += 1;
           summary[result] += 1;
         }
 
@@ -92,6 +94,7 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
             amount: Number(transaction.amount),
             pending: transaction.pending,
           });
+          if (transaction.pending) summary.pending += 1;
           summary.modified += 1;
         }
 
