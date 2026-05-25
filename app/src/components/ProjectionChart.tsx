@@ -47,6 +47,7 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
 
   const hasNegative = minBalance < 0;
   const dangerDay = projection.find((d) => d.balance < 0);
+  const lowDay = projection.reduce((lowest, day) => day.balance < lowest.balance ? day : lowest);
 
   const data = projection.map((d) => ({
     ...d,
@@ -84,11 +85,16 @@ export default function ProjectionChart({ projection, projectionDays = 28, onDay
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold text-slate-800">Cash Projection</h2>
           {hasNegative && dangerDay && (
             <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
               Goes negative {format(parseISO(dangerDay.date), "MMM d")}
+            </span>
+          )}
+          {hasNegative && (
+            <span className="text-xs font-semibold text-red-700 bg-red-100 px-2.5 py-1 rounded-full">
+              Needs {fmt(Math.abs(lowDay.balance))} by {format(parseISO(lowDay.date), "MMM d")}
             </span>
           )}
         </div>

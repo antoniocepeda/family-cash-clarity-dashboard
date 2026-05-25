@@ -1,13 +1,31 @@
 "use client";
 
-import { Account } from "@/lib/types";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { Account, ProjectionDay } from "@/lib/types";
 
 interface Props {
   accounts: Account[];
+  projection: ProjectionDay[];
   lastUpdated: string;
 }
 
-export default function CashPositionStrip({ accounts, lastUpdated }: Props) {
+const AVERAGE_DAYS_PER_MONTH = 365.25 / 12;
+
+function getMonthlySafetyAmount(projection: ProjectionDay[]) {
+  const firstDay = projection[0];
+  if (!firstDay) return null;
+
+  const startDate = parseISO(firstDay.date);
+  const monthlyCapacities = projection.map((day) => {
+    const daysFromStart = differenceInCalendarDays(parseISO(day.date), startDate);
+    const monthsAvailable = Math.floor(daysFromStart / AVERAGE_DAYS_PER_MONTH) + 1;
+    return day.balance / monthsAvailable;
+  });
+
+  return Math.min(...monthlyCapacities);
+}
+
+export default function CashPositionStrip({ accounts, projection, lastUpdated }: Props) {
   const onHand = accounts
     .filter((a) => !a.is_reserve)
     .reduce((sum, a) => sum + a.current_balance, 0);
@@ -16,7 +34,9 @@ export default function CashPositionStrip({ accounts, lastUpdated }: Props) {
     .filter((a) => a.is_reserve)
     .reduce((sum, a) => sum + a.current_balance, 0);
 
-  const trueAvailable = onHand;
+  const monthlySafetyAmount = getMonthlySafetyAmount(projection);
+  const needsExtra = monthlySafetyAmount !== null && monthlySafetyAmount < 0;
+  const safetyAmount = Math.abs(monthlySafetyAmount ?? 0);
 
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -41,10 +61,18 @@ export default function CashPositionStrip({ accounts, lastUpdated }: Props) {
 
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-500 to-sky-700 p-5 text-white shadow-lg">
         <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
-        <p className="text-sm font-medium text-sky-100 tracking-wide uppercase">True Available</p>
-        <p className="mt-1 text-3xl font-bold tracking-tight">{fmt(trueAvailable)}</p>
+        <p className="text-sm font-medium text-sky-100 tracking-wide uppercase">
+          {needsExtra ? "Stay Positive / Month" : "Safe Extra Spend / Month"}
+        </p>
+        <p className="mt-1 text-3xl font-bold tracking-tight">
+          {monthlySafetyAmount === null ? "—" : fmt(safetyAmount)}
+        </p>
         <p className="mt-2 text-xs text-sky-200">
-          Updated {lastUpdated ? new Date(lastUpdated).toLocaleDateString() : "—"}
+          {monthlySafetyAmount === null
+            ? `Updated ${lastUpdated ? new Date(lastUpdated).toLocaleDateString() : "—"}`
+            : needsExtra
+              ? "Monthly cash needed to avoid a 6-month dip below $0"
+              : "Monthly room before a 6-month dip below $0"}
         </p>
       </div>
     </div>

@@ -19,6 +19,10 @@ const firebaseConfig = {
   appId: configuredFirebaseConfig.appId ?? "1:000000000000:web:0000000000000000000000",
 };
 
+export function isFirebaseClientConfigured() {
+  return hasFirebaseClientConfig;
+}
+
 export function getFirebaseAuth() {
   if (!hasFirebaseClientConfig && typeof window !== "undefined") {
     throw new Error("Missing Firebase client environment variables.");

@@ -32,6 +32,7 @@ interface Props {
   commitments: CommitmentWithInstances[];
   onRollover: (id: string, instanceDueDate: string) => void;
   onEditInstanceAmount?: (commitmentId: string, dueDate: string, newAmount: number) => void;
+  onReceiveIncome?: (commitmentId: string, dueDate: string, actualAmount: number) => void;
   onLeftover?: (commitmentId: string, instanceDueDate: string, action: "rollover" | "release") => void;
   simulatedIds: Set<string>;
   onSimulateToggle: (id: string) => void;
@@ -104,9 +105,11 @@ function expandCommitmentOccurrences(
   return rows;
 }
 
-export default function UpcomingCommitments({ commitments, onRollover, onEditInstanceAmount, onLeftover, simulatedIds, onSimulateToggle }: Props) {
+export default function UpcomingCommitments({ commitments, onRollover, onEditInstanceAmount, onReceiveIncome, onLeftover, simulatedIds, onSimulateToggle }: Props) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [receivingKey, setReceivingKey] = useState<string | null>(null);
+  const [receiveValue, setReceiveValue] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
   const today = startOfDay(new Date());
   const projectionCutoff = addDays(today, 28);
@@ -137,13 +140,13 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="p-5 pb-3">
-        <h2 className="text-lg font-semibold text-slate-800">Expenses</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Cash Events</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-y border-slate-100 bg-slate-50/50">
-              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Expense</th>
+              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Event</th>
               <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
               <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Due</th>
               <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Recurrence</th>
@@ -316,6 +319,18 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                           {simulatedIds.has(commitment.id) ? "Simulating" : "What if?"}
                         </button>
                       )}
+                      {!isFunded && commitment.type === "bill" && onEditInstanceAmount && editingKey !== `${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}` && (
+                        <button
+                          onClick={() => {
+                            setEditingKey(`${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`);
+                            setEditValue(planned.toFixed(2));
+                          }}
+                          className="text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                          title="Update this bill occurrence when the actual amount is known"
+                        >
+                          Adjust
+                        </button>
+                      )}
                       {isFunded ? (
                         <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
                           <svg className="h-3.5 w-3.5 inline -mt-0.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -323,6 +338,53 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                           </svg>
                           Done
                         </span>
+                      ) : commitment.type === "income" && onReceiveIncome ? (
+                        receivingKey === `${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}` ? (
+                          <form
+                            className="flex items-center justify-end gap-1"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              const actualAmount = parseFloat(receiveValue);
+                              if (Number.isFinite(actualAmount) && actualAmount > 0) {
+                                onReceiveIncome(commitment.id, format(occurrenceDate, "yyyy-MM-dd"), actualAmount);
+                                setReceivingKey(null);
+                              }
+                            }}
+                          >
+                            <span className="text-xs text-slate-400">$</span>
+                            <input
+                              autoFocus
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={receiveValue}
+                              onChange={(event) => setReceiveValue(event.target.value)}
+                              className="w-24 rounded border border-emerald-300 px-2 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500"
+                              aria-label={`Actual amount received for ${commitment.name}`}
+                            />
+                            <button className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setReceivingKey(null)}
+                              className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+                            >
+                              Cancel
+                            </button>
+                          </form>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setReceivingKey(`${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`);
+                              setReceiveValue(planned.toFixed(2));
+                            }}
+                            className="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                            title="Record the amount that actually arrived"
+                          >
+                            Receive
+                          </button>
+                        )
                       ) : isOverdue && commitment.recurrence_rule && remaining > 0.005 && onLeftover ? (
                         <>
                           <button

@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
+  const [trendProjection, setTrendProjection] = useState<ProjectionDay[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -29,10 +30,11 @@ export default function Dashboard() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [acctRes, cmtRes, proj, alertRes] = await Promise.all([
+      const [acctRes, cmtRes, proj, trendProj, alertRes] = await Promise.all([
         authFetch("/api/accounts"),
         authFetch("/api/commitments"),
         fetchProjection(),
+        fetchProjection(180),
         authFetch("/api/alerts"),
       ]);
       const [accts, cmts, alts] = await Promise.all([
@@ -43,6 +45,7 @@ export default function Dashboard() {
       setAccounts(accts);
       setCommitments(cmts);
       setProjection(proj);
+      setTrendProjection(trendProj);
       setAlerts(alts);
       setLastUpdated(new Date().toISOString());
     } catch (err) {
@@ -134,7 +137,7 @@ export default function Dashboard() {
       <Nav />
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-6 flex-1 w-full">
-        <CashPositionStrip accounts={accounts} lastUpdated={lastUpdated} />
+        <CashPositionStrip accounts={accounts} projection={trendProjection} lastUpdated={lastUpdated} />
 
         {alerts.filter((a) => a.severity === "critical" || a.severity === "warning").length > 0 && (
           <RiskBanner alerts={alerts.filter((a) => a.severity !== "info")} />

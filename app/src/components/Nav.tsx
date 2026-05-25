@@ -10,7 +10,7 @@ export default function Nav() {
 
   const links = [
     { href: "/", label: "Dashboard" },
-    { href: "/expenses", label: "Expenses" },
+    { href: "/expenses", label: "Cash Calendar" },
     { href: "/transactions", label: "Transactions" },
     { href: "/trends", label: "Spending Trends" },
     { href: "/manage", label: "Manage" },

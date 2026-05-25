@@ -2,20 +2,29 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Nav from "@/components/Nav";
+import CashCalendar from "@/components/CashCalendar";
 import UpcomingCommitments from "@/components/UpcomingCommitments";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { CommitmentWithInstances } from "@/lib/types";
+import { Account, CommitmentWithInstances } from "@/lib/types";
 
 export default function ExpensesPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [loading, setLoading] = useState(true);
   const [simulatedIds, setSimulatedIds] = useState<Set<string>>(new Set());
 
   const fetchCommitments = useCallback(async () => {
     try {
-      const res = await authFetch("/api/commitments");
-      const cmts = await readJsonArray<CommitmentWithInstances>(res, "Commitments fetch");
+      const [accountRes, commitmentRes] = await Promise.all([
+        authFetch("/api/accounts"),
+        authFetch("/api/commitments"),
+      ]);
+      const [accts, cmts] = await Promise.all([
+        readJsonArray<Account>(accountRes, "Accounts fetch"),
+        readJsonArray<CommitmentWithInstances>(commitmentRes, "Commitments fetch"),
+      ]);
+      setAccounts(accts);
       setCommitments(cmts);
     } catch (err) {
       console.error("Failed to fetch expenses:", err);
@@ -37,11 +46,38 @@ export default function ExpensesPage() {
     fetchCommitments();
   };
 
+  const handleAddCashEvent = async (expense: {
+    name: string;
+    amount: number;
+    due_date: string;
+    recurrence_rule: string;
+    priority: string;
+    autopay: boolean;
+    account_id: string;
+    type: "bill" | "income";
+  }) => {
+    await authFetch("/api/commitments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(expense),
+    });
+    await fetchCommitments();
+  };
+
   const handleEditInstanceAmount = async (commitmentId: string, dueDate: string, newAmount: number) => {
     await authFetch("/api/commitment-instances", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ commitment_id: commitmentId, due_date: dueDate, planned_amount: newAmount }),
+    });
+    fetchCommitments();
+  };
+
+  const handleReceiveIncome = async (commitmentId: string, dueDate: string, actualAmount: number) => {
+    await authFetch("/api/commitments/mark-paid", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: commitmentId, instance_due_date: dueDate, actual_amount: actualAmount }),
     });
     fetchCommitments();
   };
@@ -81,11 +117,17 @@ export default function ExpensesPage() {
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1 space-y-6">
+        <CashCalendar
+          accounts={accounts}
+          commitments={commitments}
+          onAddEvent={handleAddCashEvent}
+        />
         <UpcomingCommitments
           commitments={commitments}
           onRollover={handleRollover}
           onEditInstanceAmount={handleEditInstanceAmount}
+          onReceiveIncome={handleReceiveIncome}
           onLeftover={handleLeftover}
           simulatedIds={simulatedIds}
           onSimulateToggle={handleSimulateToggle}

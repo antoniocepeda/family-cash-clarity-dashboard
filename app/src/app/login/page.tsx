@@ -4,7 +4,7 @@ import { FormEvent, ReactNode, Suspense, useState } from "react";
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isAuthorizedEmail } from "@/lib/authorized-users";
-import { getFirebaseAuth } from "@/lib/firebase/client";
+import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
 
 export default function LoginPage() {
   return (
@@ -21,11 +21,15 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const isFirebaseConfigured = isFirebaseClientConfigured();
 
   const next = searchParams.get("next") || "/";
-  const initialError = searchParams.get("error") === "unauthorized"
+  const errorParam = searchParams.get("error");
+  const initialError = errorParam === "unauthorized"
     ? "That account is not authorized for this dashboard."
-    : "";
+    : errorParam === "missing-config"
+      ? "Firebase is not configured for local development."
+      : "";
   const redirectAfterSignIn = () => {
     router.replace(next.startsWith("/") ? next : "/");
   };
@@ -33,6 +37,12 @@ function LoginForm() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+
+    if (!isFirebaseConfigured) {
+      setError("Add Firebase values to app/.env.local, then restart npm run dev.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -54,6 +64,12 @@ function LoginForm() {
 
   const handleGoogleSignIn = async () => {
     setError("");
+
+    if (!isFirebaseConfigured) {
+      setError("Add Firebase values to app/.env.local, then restart npm run dev.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -81,7 +97,7 @@ function LoginForm() {
         <button
           type="button"
           onClick={() => void handleGoogleSignIn()}
-          disabled={loading}
+          disabled={loading || !isFirebaseConfigured}
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-sm font-bold text-blue-600">
@@ -107,6 +123,7 @@ function LoginForm() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
+            disabled={!isFirebaseConfigured}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
           />
         </div>
@@ -122,6 +139,7 @@ function LoginForm() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
+            disabled={!isFirebaseConfigured}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
           />
         </div>
@@ -134,7 +152,7 @@ function LoginForm() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !isFirebaseConfigured}
           className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Signing in..." : "Sign in"}

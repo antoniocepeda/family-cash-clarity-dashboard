@@ -300,6 +300,9 @@ export function instanceId(commitmentId: string, dueDate: string) {
 export async function ensureInstance(userId: string, commitmentId: string, dueDate: string, plannedAmount: number) {
   const id = instanceId(commitmentId, dueDate);
   const ref = collection(userId, COLLECTIONS.commitmentInstances).doc(id);
+  const existing = await ref.get();
+  if (existing.exists) return id;
+
   await ref.set(
     {
       ...stampCreate(userId),
@@ -314,8 +317,7 @@ export async function ensureInstance(userId: string, commitmentId: string, dueDa
       remaining_amount: plannedAmount,
       remainingAmount: plannedAmount,
       status: "open",
-    },
-    { merge: true }
+    }
   );
   return id;
 }
@@ -771,6 +773,9 @@ export async function markCommitmentPaid(userId: string, id: string, actualAmoun
   if (!accountId) throw new Error("No account linked. Please select an account for this payment.");
   const paidDate = format(new Date(), "yyyy-MM-dd");
   const dueDate = instanceDueDate || commitment.due_date;
+  if (commitment.type === "income") {
+    await updateInstancePlan(userId, commitment.id, dueDate, actualAmount);
+  }
   const ledgerId = await createLedger(userId, {
     description: note ? `${commitment.name}: ${note}` : commitment.name,
     amount: actualAmount,

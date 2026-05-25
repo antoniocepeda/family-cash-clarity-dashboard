@@ -4,7 +4,7 @@ import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { isAuthorizedEmail } from "@/lib/authorized-users";
-import { getFirebaseAuth } from "@/lib/firebase/client";
+import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
 
 type AuthContextValue = {
   user: User | null;
@@ -20,9 +20,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isFirebaseClientConfigured());
 
   useEffect(() => {
+    if (!isFirebaseClientConfigured()) {
+      if (!PUBLIC_PATHS.has(pathname)) {
+        router.replace(`/login?next=${encodeURIComponent(pathname)}&error=missing-config`);
+      }
+      return;
+    }
+
     const auth = getFirebaseAuth();
     return onAuthStateChanged(auth, (nextUser) => {
       if (nextUser && !isAuthorizedEmail(nextUser.email)) {
@@ -36,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(nextUser);
       setLoading(false);
     });
-  }, [router]);
+  }, [pathname, router]);
 
   useEffect(() => {
     if (loading) return;
@@ -50,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loading, pathname, router, user]);
 
   const signOutUser = useCallback(async () => {
+    if (!isFirebaseClientConfigured()) return;
+
     await signOut(getFirebaseAuth());
     router.replace("/login");
   }, [router]);
