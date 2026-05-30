@@ -17,6 +17,8 @@ interface EditForm {
   type: "expense" | "income";
 }
 
+type PendingFilter = "all" | "pending" | "posted";
+
 export default function LedgerStatement({
   accounts,
   onRefresh,
@@ -27,6 +29,7 @@ export default function LedgerStatement({
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("this_month");
+  const [pendingFilter, setPendingFilter] = useState<PendingFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -163,8 +166,12 @@ export default function LedgerStatement({
       );
     }
 
+    if (pendingFilter !== "all") {
+      result = result.filter((e) => (pendingFilter === "pending" ? Boolean(e.pending) : !e.pending));
+    }
+
     return result;
-  }, [entries, dateFilter, searchQuery, customStart, customEnd]);
+  }, [entries, dateFilter, searchQuery, customStart, customEnd, pendingFilter]);
 
   const runningBalances = useMemo(() => {
     const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
@@ -186,6 +193,11 @@ export default function LedgerStatement({
     }
     return { income, expense, net: income - expense };
   }, [filtered]);
+
+  const pendingCount = useMemo(
+    () => entries.filter((e) => e.pending && !e.removed).length,
+    [entries]
+  );
 
   if (loading) {
     return (
@@ -253,6 +265,28 @@ export default function LedgerStatement({
             placeholder="Search by description or expense..."
             className="w-full sm:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none"
           />
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          {(["all", "pending", "posted"] as PendingFilter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => {
+                setPendingFilter(f);
+                if (f === "pending") setDateFilter("all");
+              }}
+              className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                pendingFilter === f
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              {f === "all" ? "All statuses" : f === "pending" ? "Pending only" : "Posted only"}
+            </button>
+          ))}
+          <span className="text-xs text-slate-500">
+            Pending in ledger: <span className="font-semibold">{pendingCount}</span>
+          </span>
         </div>
 
         <div className="flex items-center gap-4 mt-3 text-xs">
