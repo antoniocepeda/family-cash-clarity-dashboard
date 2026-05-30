@@ -8,10 +8,11 @@ import Nav from "@/components/Nav";
 import RunwayView from "@/components/RunwayView";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { Account, AllocationInput, CommitmentInstance, LedgerItemInput, ProjectionDay } from "@/lib/types";
+import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerItemInput, ProjectionDay } from "@/lib/types";
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
   const [trendProjection, setTrendProjection] = useState<ProjectionDay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,13 +30,18 @@ export default function Dashboard() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [acctRes, proj, trendProj] = await Promise.all([
+      const [acctRes, proj, trendProj, cmtRes] = await Promise.all([
         authFetch("/api/accounts"),
         fetchProjection(),
         fetchProjection(180),
+        authFetch("/api/commitments"),
       ]);
-      const [accts] = await Promise.all([readJsonArray<Account>(acctRes, "Accounts fetch")]);
+      const [accts, cmts] = await Promise.all([
+        readJsonArray<Account>(acctRes, "Accounts fetch"),
+        readJsonArray<CommitmentWithInstances>(cmtRes, "Commitments fetch"),
+      ]);
       setAccounts(accts);
+      setCommitments(cmts);
       setProjection(proj);
       setTrendProjection(trendProj);
       setLastUpdated(new Date().toISOString());
@@ -147,7 +153,7 @@ export default function Dashboard() {
       <Nav />
 
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-6 flex-1 w-full">
-        <CashPositionStrip accounts={accounts} projection={trendProjection} lastUpdated={lastUpdated} />
+        <CashPositionStrip accounts={accounts} commitments={commitments} projection={trendProjection} lastUpdated={lastUpdated} />
 
         <div>
           <ProjectionChart

@@ -1,10 +1,11 @@
 "use client";
 
-import { differenceInCalendarDays, parseISO } from "date-fns";
-import { Account, ProjectionDay } from "@/lib/types";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { Account, CommitmentWithInstances, ProjectionDay } from "@/lib/types";
 
 interface Props {
   accounts: Account[];
+  commitments: CommitmentWithInstances[];
   projection: ProjectionDay[];
   lastUpdated: string;
 }
@@ -25,10 +26,44 @@ function getMonthlySafetyAmount(projection: ProjectionDay[]) {
   return Math.min(...monthlyCapacities);
 }
 
-export default function CashPositionStrip({ accounts, projection, lastUpdated }: Props) {
+function getSafeToSpend(accounts: Account[], commitments: CommitmentWithInstances[], projection: ProjectionDay[]) {
   const onHand = accounts
     .filter((a) => !a.is_reserve)
     .reduce((sum, a) => sum + a.current_balance, 0);
+  const today = format(new Date(), "yyyy-MM-dd");
+
+  const recurringIncomeIds = new Set(
+    commitments
+      .filter((commitment) => commitment.active && commitment.type === "income" && commitment.recurrence_rule)
+      .map((commitment) => commitment.id)
+  );
+
+  const nextPayday = projection
+    .flatMap((day) =>
+      day.commitments
+        .filter((commitment) => commitment.commitment_id && recurringIncomeIds.has(commitment.commitment_id))
+        .map(() => day.date)
+    )
+    .sort((a, b) => a.localeCompare(b))[0] ?? null;
+
+  const plannedThroughPayday = nextPayday
+    ? projection
+        .filter((day) => day.date < nextPayday)
+        .flatMap((day) => day.commitments)
+        .filter((commitment) => commitment.type === "bill" && (commitment.original_due_date ?? commitment.due_date ?? "") >= today)
+        .reduce((sum, commitment) => sum + commitment.amount, 0)
+    : 0;
+
+  return {
+    onHand,
+    nextPayday,
+    plannedThroughPayday,
+    safeToSpend: onHand - plannedThroughPayday,
+  };
+}
+
+export default function CashPositionStrip({ accounts, commitments, projection, lastUpdated }: Props) {
+  const { onHand, nextPayday, plannedThroughPayday, safeToSpend } = getSafeToSpend(accounts, commitments, projection);
 
   const reserved = accounts
     .filter((a) => a.is_reserve)
@@ -43,12 +78,14 @@ export default function CashPositionStrip({ accounts, projection, lastUpdated }:
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-lg">
+      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${safeToSpend < 0 ? "from-rose-500 to-rose-700" : "from-emerald-500 to-emerald-700"} p-5 text-white shadow-lg`}>
         <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
-        <p className="text-sm font-medium text-emerald-100 tracking-wide uppercase">Cash On-Hand</p>
-        <p className="mt-1 text-3xl font-bold tracking-tight">{fmt(onHand)}</p>
-        <p className="mt-2 text-xs text-emerald-200">
-          Across {accounts.filter((a) => !a.is_reserve).length} account{accounts.filter((a) => !a.is_reserve).length !== 1 ? "s" : ""}
+        <p className={`text-sm font-medium ${safeToSpend < 0 ? "text-rose-100" : "text-emerald-100"} tracking-wide uppercase`}>Safe To Spend</p>
+        <p className="mt-1 text-3xl font-bold tracking-tight">{fmt(safeToSpend)}</p>
+        <p className={`mt-2 text-xs ${safeToSpend < 0 ? "text-rose-100" : "text-emerald-100"}`}>
+          {nextPayday
+            ? `${fmt(onHand)} balance - ${fmt(plannedThroughPayday)} planned before ${format(parseISO(nextPayday), "MMM d")}`
+            : `${fmt(onHand)} balance; add recurring income to set payday`}
         </p>
       </div>
 
