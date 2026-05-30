@@ -19,7 +19,21 @@ interface CommitmentRow {
 interface ProjectionDay {
   date: string;
   balance: number;
-  commitments: { name: string; amount: number; type: string; priority: string }[];
+  commitments: {
+    commitment_id?: string;
+    name: string;
+    amount: number;
+    type: string;
+    priority: string;
+    due_date?: string;
+    original_due_date?: string;
+    status?: string;
+    paid_date?: string | null;
+  }[];
+}
+
+function isSettledStatus(status?: string) {
+  return status === "paid" || status === "funded" || status === "skipped";
 }
 
 export function expandRecurrence(commitment: CommitmentRow, startDate: Date, endDate: Date): Date[] {
@@ -58,7 +72,7 @@ export async function generateProjection(userId: string, days: number = 28, simu
 
   const instanceMap = new Map<string, typeof instanceRows[0]>();
   for (const row of instanceRows) {
-    instanceMap.set(`${row.commitment_id}|${row.due_date}`, row);
+    instanceMap.set(`${row.commitment_id}|${row.original_due_date || row.due_date}`, row);
   }
 
   const simulateSet = new Set(simulateEarlyIds);
@@ -103,27 +117,32 @@ export async function generateProjection(userId: string, days: number = 28, simu
     }
 
     for (const occ of occurrences) {
-      const key = format(occ, "yyyy-MM-dd");
+      const isOverdueOcc = overdueDateStr && isEqual(occ, today);
+      const originalDueDate = isOverdueOcc && overdueDateStr ? overdueDateStr : format(occ, "yyyy-MM-dd");
+      const instanceLookup = `${commitment.id}|${originalDueDate}`;
+      const instance = instanceMap.get(instanceLookup);
+      const key = instance?.due_date ?? originalDueDate;
       const day = dayMap.get(key);
       if (!day) continue;
 
-      const isOverdueOcc = overdueDateStr && isEqual(occ, today);
-      const instanceLookup = isOverdueOcc ? `${commitment.id}|${overdueDateStr}` : `${commitment.id}|${key}`;
-      const instance = instanceMap.get(instanceLookup);
-
       let effectiveAmount = commitment.amount;
       if (instance) {
-        if (instance.status === "funded") continue;
+        if (isSettledStatus(instance.status)) continue;
         effectiveAmount = instance.planned_amount - instance.allocated_amount;
         if (effectiveAmount <= 0.005) continue;
       }
 
       const impact = commitment.type === "income" ? effectiveAmount : -effectiveAmount;
       day.commitments.push({
-        name: commitment.name + (isSimulated ? " (simulated)" : ""),
+        commitment_id: commitment.id,
+        name: (instance?.name_override || commitment.name) + (isSimulated ? " (simulated)" : ""),
         amount: effectiveAmount,
         type: commitment.type,
         priority: commitment.priority,
+        due_date: key,
+        original_due_date: originalDueDate,
+        status: instance?.status ?? "planned",
+        paid_date: instance?.paid_date,
       });
 
       for (let j = dayMap.size - 1; j >= 0; j--) {
@@ -169,7 +188,7 @@ export async function generateAlerts(userId: string): Promise<{
 
     const instanceRow = (await listInstances(userId)).find((i) => i.commitment_id === commitment.id && i.due_date === commitment.due_date);
 
-    if (instanceRow?.status === "funded") continue;
+    if (isSettledStatus(instanceRow?.status)) continue;
 
     const remaining = instanceRow
       ? instanceRow.planned_amount - instanceRow.allocated_amount

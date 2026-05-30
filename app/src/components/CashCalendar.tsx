@@ -1,25 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   addMonths,
-  addDays,
-  addWeeks,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
   format,
-  isAfter,
   isBefore,
-  isEqual,
   isSameDay,
   isSameMonth,
   parseISO,
-  startOfDay,
   startOfMonth,
+  startOfToday,
   startOfWeek,
 } from "date-fns";
-import { Account, CommitmentWithInstances } from "@/lib/types";
+import { Account, CommitmentInstance, CommitmentWithInstances, ProjectionDay } from "@/lib/types";
 
 interface NewCashEvent {
   name: string;
@@ -32,10 +28,30 @@ interface NewCashEvent {
   type: "bill" | "income";
 }
 
+type EditableItem = ProjectionDay["commitments"][number];
+type RiskState = "safe" | "tight" | "below buffer" | "negative" | "overdue";
+
 interface Props {
   accounts: Account[];
   commitments: CommitmentWithInstances[];
+  projection: ProjectionDay[];
   onAddEvent: (expense: NewCashEvent) => Promise<void>;
+  onUpdateInstance: (input: {
+    commitment_id: string;
+    original_due_date: string;
+    due_date: string;
+    planned_amount: number;
+    status: CommitmentInstance["status"];
+    scope: "instance" | "future" | "template";
+    name?: string;
+  }) => Promise<void>;
+  onDeleteInstance: (input: {
+    commitment_id: string;
+    original_due_date: string;
+    due_date: string;
+    planned_amount: number;
+    name?: string;
+  }) => Promise<void>;
 }
 
 const recurrenceOptions = [
@@ -47,29 +63,56 @@ const recurrenceOptions = [
   { value: "annual", label: "Yearly" },
 ];
 
-function advanceByRule(base: Date, rule: string): Date {
-  if (rule.startsWith("every_")) {
-    if (rule.endsWith("_days")) {
-      const days = parseInt(rule.slice(6, -5), 10);
-      if (!isNaN(days) && days > 0) return addDays(base, days);
-    }
-    if (rule.endsWith("_weeks")) {
-      const weeks = parseInt(rule.slice(6, -6), 10);
-      if (!isNaN(weeks) && weeks > 0) return addWeeks(base, weeks);
-    }
-  }
+const statuses: CommitmentInstance["status"][] = ["planned", "paid", "deferred", "skipped", "overdue"];
 
-  switch (rule) {
-    case "weekly": return addDays(base, 7);
-    case "biweekly": return addWeeks(base, 2);
-    case "monthly": return addMonths(base, 1);
-    case "quarterly": return addMonths(base, 3);
-    case "annual": return addMonths(base, 12);
-    default: return addMonths(base, 1);
+const money = (value: number, exact = false) =>
+  value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: exact ? 2 : 0,
+    maximumFractionDigits: exact ? 2 : 0,
+  });
+
+function getRiskState(day: ProjectionDay | undefined, bufferAmount = 500): RiskState {
+  if (!day) return "safe";
+  const hasOverdue = day.commitments.some((item) => item.status === "overdue");
+  const hasUnpaidBills = day.commitments.some((item) => item.type !== "income" && !["paid", "skipped"].includes(item.status ?? ""));
+  if (hasOverdue || (isBefore(parseISO(day.date), startOfToday()) && hasUnpaidBills)) return "overdue";
+  if (day.balance < 0) return "negative";
+  if (day.balance < bufferAmount) return "below buffer";
+  if (day.balance < bufferAmount * 1.5) return "tight";
+  return "safe";
+}
+
+function dayClasses(risk: RiskState, inMonth: boolean, selected: boolean) {
+  const base = selected ? "ring-2 ring-sky-500" : "";
+  const dim = inMonth ? "" : "opacity-45";
+  const colors = {
+    safe: "border-emerald-100 bg-emerald-50/45",
+    tight: "border-yellow-200 bg-yellow-50",
+    "below buffer": "border-amber-300 bg-amber-50",
+    negative: "border-red-300 bg-red-50",
+    overdue: "border-fuchsia-300 bg-fuchsia-50",
+  };
+  return `${base} ${dim} ${colors[risk]}`;
+}
+
+function riskLabelClasses(risk: RiskState) {
+  switch (risk) {
+    case "negative":
+      return "bg-red-100 text-red-700";
+    case "overdue":
+      return "bg-fuchsia-100 text-fuchsia-700";
+    case "below buffer":
+      return "bg-amber-100 text-amber-800";
+    case "tight":
+      return "bg-yellow-100 text-yellow-800";
+    default:
+      return "bg-emerald-100 text-emerald-700";
   }
 }
 
-export default function CashCalendar({ accounts, commitments, onAddEvent }: Props) {
+export default function CashCalendar({ accounts, projection, onAddEvent, onUpdateInstance, onDeleteInstance }: Props) {
   const [month, setMonth] = useState(startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [type, setType] = useState<"bill" | "income">("bill");
@@ -80,6 +123,13 @@ export default function CashCalendar({ accounts, commitments, onAddEvent }: Prop
   const [autopay, setAutopay] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<EditableItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editStatus, setEditStatus] = useState<CommitmentInstance["status"]>("planned");
+  const [editScope, setEditScope] = useState<"instance" | "future" | "template">("instance");
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accountId && accounts[0]) setAccountId(accounts[0].id);
@@ -94,40 +144,14 @@ export default function CashCalendar({ accounts, commitments, onAddEvent }: Prop
     [month]
   );
 
-  const eventsByDate = useMemo(() => {
-    const dates = new Map<string, { bills: number; deposits: number }>();
-    const calendarStart = calendarDays[0];
-    const calendarEnd = calendarDays[calendarDays.length - 1];
+  const projectionByDate = useMemo(() => {
+    const map = new Map<string, ProjectionDay>();
+    projection.forEach((day) => map.set(day.date, day));
+    return map;
+  }, [projection]);
 
-    const addOccurrence = (date: Date, type: "bill" | "income") => {
-      const dateKey = format(date, "yyyy-MM-dd");
-      const eventCounts = dates.get(dateKey) || { bills: 0, deposits: 0 };
-      if (type === "bill") eventCounts.bills += 1;
-      else eventCounts.deposits += 1;
-      dates.set(dateKey, eventCounts);
-    };
-
-    for (const commitment of commitments) {
-      if (!commitment.active) continue;
-      let occurrence = startOfDay(parseISO(commitment.due_date));
-
-      if (!commitment.recurrence_rule) {
-        if (!isBefore(occurrence, calendarStart) && !isAfter(occurrence, calendarEnd)) {
-          addOccurrence(occurrence, commitment.type);
-        }
-        continue;
-      }
-
-      while (isBefore(occurrence, calendarStart)) {
-        occurrence = advanceByRule(occurrence, commitment.recurrence_rule);
-      }
-      while (isBefore(occurrence, calendarEnd) || isEqual(occurrence, calendarEnd)) {
-        addOccurrence(occurrence, commitment.type);
-        occurrence = advanceByRule(occurrence, commitment.recurrence_rule);
-      }
-    }
-    return dates;
-  }, [calendarDays, commitments]);
+  const selectedKey = format(selectedDate, "yyyy-MM-dd");
+  const selectedDay = projectionByDate.get(selectedKey);
 
   const saveEvent = async () => {
     const parsedAmount = parseFloat(amount);
@@ -155,12 +179,84 @@ export default function CashCalendar({ accounts, commitments, onAddEvent }: Prop
     }
   };
 
+  const startEdit = (item: EditableItem) => {
+    if (!item.commitment_id) return;
+    setEditing(item);
+    setEditName(item.name);
+    setEditAmount(item.amount.toFixed(2));
+    setEditDate(item.due_date ?? item.original_due_date ?? "");
+    setEditStatus((item.status ?? "planned") as CommitmentInstance["status"]);
+    setEditScope("instance");
+  };
+
+  const saveEdit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editing?.commitment_id) return;
+    const plannedAmount = parseFloat(editAmount);
+    if (!Number.isFinite(plannedAmount) || plannedAmount < 0 || !editDate) return;
+    setSaving(true);
+    try {
+      await onUpdateInstance({
+        commitment_id: editing.commitment_id,
+        original_due_date: editing.original_due_date ?? editing.due_date ?? editDate,
+        due_date: editDate,
+        planned_amount: plannedAmount,
+        status: editStatus,
+        scope: editScope,
+        name: editName.trim() || editing.name,
+      });
+      setEditing(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const moveItem = async (item: EditableItem, dueDate: string) => {
+    if (!item.commitment_id) return;
+    await onUpdateInstance({
+      commitment_id: item.commitment_id,
+      original_due_date: item.original_due_date ?? item.due_date ?? dueDate,
+      due_date: dueDate,
+      planned_amount: item.amount,
+      status: (item.status ?? "planned") as CommitmentInstance["status"],
+      scope: "instance",
+      name: item.name,
+    });
+  };
+
+  const deleteEditing = async () => {
+    if (!editing?.commitment_id) return;
+    setSaving(true);
+    try {
+      await onDeleteInstance({
+        commitment_id: editing.commitment_id,
+        original_due_date: editing.original_due_date ?? editing.due_date ?? editDate,
+        due_date: editing.due_date ?? editDate,
+        planned_amount: editing.amount,
+        name: editing.name,
+      });
+      setEditing(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <section className="border-b border-slate-200 pb-6">
-      <p className="mb-4 text-sm text-slate-500">Pick a date to add money going out or a deposit coming in.</p>
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Cash Calendar</h1>
+          <p className="mt-1 text-sm text-slate-500">Plan bills and income directly on the month view.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+          {(["safe", "tight", "below buffer", "negative", "overdue"] as RiskState[]).map((risk) => (
+            <span key={risk} className={`rounded-full px-2 py-1 capitalize ${riskLabelClasses(risk)}`}>{risk}</span>
+          ))}
+        </div>
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="mb-3 flex items-center justify-between">
             <button
               type="button"
@@ -180,15 +276,20 @@ export default function CashCalendar({ accounts, commitments, onAddEvent }: Prop
               <span aria-hidden="true">&gt;</span>
             </button>
           </div>
-          <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase text-slate-400">
+
+          <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase text-slate-400">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
               <span key={day} className="py-2">{day}</span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-7 sm:gap-1.5">
             {calendarDays.map((day) => {
               const dateKey = format(day, "yyyy-MM-dd");
-              const eventCounts = eventsByDate.get(dateKey);
+              const dayProjection = projectionByDate.get(dateKey);
+              const items = dayProjection?.commitments ?? [];
+              const visibleItems = items.slice(0, 3);
+              const risk = getRiskState(dayProjection);
               const selected = isSameDay(day, selectedDate);
 
               return (
@@ -196,156 +297,239 @@ export default function CashCalendar({ accounts, commitments, onAddEvent }: Prop
                   type="button"
                   key={dateKey}
                   onClick={() => setSelectedDate(day)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const payload = event.dataTransfer.getData("application/json");
+                    if (!payload) return;
+                    void moveItem(JSON.parse(payload) as EditableItem, dateKey).finally(() => setDraggingKey(null));
+                  }}
                   aria-pressed={selected}
-                  className={`relative flex aspect-square min-h-12 flex-col items-center justify-center rounded-md border text-sm transition-colors ${
-                    selected
-                      ? "border-sky-600 bg-sky-600 font-semibold text-white"
-                      : isSameMonth(day, month)
-                      ? "border-slate-100 text-slate-700 hover:border-sky-200 hover:bg-sky-50"
-                      : "border-transparent text-slate-300 hover:bg-slate-50"
-                  }`}
+                  className={`min-h-[132px] rounded-md border p-2 text-left transition-colors hover:border-sky-300 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
                 >
-                  {format(day, "d")}
-                  {eventCounts && (
-                    <span className="absolute bottom-1 flex gap-1">
-                      {eventCounts.bills > 0 && (
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${selected ? "bg-white" : "bg-rose-400"}`}
-                          title={`${eventCounts.bills} expense${eventCounts.bills === 1 ? "" : "s"} starts on this date`}
-                        />
-                      )}
-                      {eventCounts.deposits > 0 && (
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${selected ? "bg-emerald-100" : "bg-emerald-500"}`}
-                          title={`${eventCounts.deposits} deposit${eventCounts.deposits === 1 ? "" : "s"} starts on this date`}
-                        />
-                      )}
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-900">{format(day, "d")}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold capitalize ${riskLabelClasses(risk)}`}>
+                      {risk === "below buffer" ? "buffer" : risk}
                     </span>
-                  )}
+                  </div>
+                  <div className={`mt-1 text-[11px] font-semibold ${dayProjection && dayProjection.balance < 0 ? "text-red-700" : "text-slate-600"}`}>
+                    End: {dayProjection ? money(dayProjection.balance) : "-"}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {visibleItems.map((item, index) => {
+                      const itemKey = `${item.commitment_id}-${item.original_due_date}-${index}`;
+                      const isIncome = item.type === "income";
+                      return (
+                        <span
+                          key={itemKey}
+                          role="button"
+                          tabIndex={0}
+                          draggable={Boolean(item.commitment_id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startEdit(item);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              startEdit(item);
+                            }
+                          }}
+                          onDragStart={(event) => {
+                            event.stopPropagation();
+                            setDraggingKey(itemKey);
+                            event.dataTransfer.setData("application/json", JSON.stringify(item));
+                          }}
+                          onDragEnd={() => setDraggingKey(null)}
+                          className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing ${
+                            isIncome
+                              ? "border-emerald-200 bg-white text-emerald-700"
+                              : "border-rose-200 bg-white text-rose-700"
+                          } ${draggingKey === itemKey ? "opacity-50" : ""}`}
+                        >
+                          <span className="block truncate text-slate-800">{item.name}</span>
+                          <span className="tabular-nums">{isIncome ? "+" : "-"}{money(item.amount, item.amount % 1 !== 0)}</span>
+                        </span>
+                      );
+                    })}
+                    {items.length > visibleItems.length && (
+                      <span className="block rounded bg-white/70 px-1.5 py-1 text-[11px] font-semibold text-slate-600">
+                        +{items.length - visibleItems.length} more
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}
           </div>
         </div>
 
-        <form
-          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void saveEvent();
-          }}
-        >
-          <div className="mb-4 flex items-baseline justify-between gap-3">
-            <h2 className="text-base font-semibold text-slate-800">Add cash event</h2>
-            <span className="text-sm font-medium text-sky-700">{format(selectedDate, "EEE, MMM d")}</span>
-          </div>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setType("bill");
-                  if (!recurrence) setRecurrence("monthly");
-                }}
-                className={`rounded px-3 py-2 text-sm font-medium ${type === "bill" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-              >
-                Expense
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setType("income");
-                  setRecurrence("");
-                  setAutopay(false);
-                }}
-                className={`rounded px-3 py-2 text-sm font-medium ${type === "income" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-              >
-                Deposit
-              </button>
+        <aside className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h2 className="text-base font-semibold text-slate-800">{format(selectedDate, "EEE, MMM d")}</h2>
+              <span className="text-sm font-bold text-slate-700">
+                End {selectedDay ? money(selectedDay.balance, true) : "-"}
+              </span>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">{type === "income" ? "Deposit source" : "Expense name"}</label>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={type === "income" ? "Paycheck, Uber payout, odd job" : "Rent, phone, streaming"}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Amount</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  placeholder="0.00"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Repeats</label>
-                <select
-                  value={recurrence}
-                  onChange={(event) => setRecurrence(event.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
-                >
-                  {recurrenceOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className={`grid gap-3 ${type === "bill" ? "grid-cols-2" : "grid-cols-1"}`}>
-              {type === "bill" && (
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Priority</label>
-                  <select
-                    value={priority}
-                    onChange={(event) => setPriority(event.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
+            <div className="space-y-2">
+              {(selectedDay?.commitments ?? []).length > 0 ? (
+                selectedDay?.commitments.map((item, index) => (
+                  <button
+                    key={`${item.commitment_id}-${item.original_due_date}-${index}`}
+                    type="button"
+                    onClick={() => startEdit(item)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-left hover:border-sky-300 hover:bg-sky-50"
                   >
-                    <option value="critical">Critical</option>
-                    <option value="normal">Normal</option>
-                    <option value="flexible">Flexible</option>
-                  </select>
-                </div>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-slate-900">{item.name}</span>
+                      <span className="text-xs capitalize text-slate-500">{item.status ?? "planned"}</span>
+                    </span>
+                    <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-emerald-700" : "text-rose-700"}`}>
+                      {item.type === "income" ? "+" : "-"}{money(item.amount, true)}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">No bills or income due.</p>
               )}
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Account</label>
-                <select
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
-                >
-                  <option value="">No account</option>
-                  {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                </select>
-              </div>
             </div>
-            {type === "bill" && (
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={autopay}
-                  onChange={(event) => setAutopay(event.target.checked)}
-                  className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-                />
-                Autopay
-              </label>
-            )}
           </div>
-          <button
-            disabled={!name.trim() || !amount || saving}
-            className="mt-4 w-full rounded-md bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+
+          <form
+            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveEvent();
+            }}
           >
-            {saving ? "Adding..." : `Add ${recurrence ? "recurring " : ""}${type === "income" ? "deposit" : "expense"}`}
-          </button>
-        </form>
+            <div className="mb-4 flex items-baseline justify-between gap-3">
+              <h2 className="text-base font-semibold text-slate-800">Add cash event</h2>
+              <span className="text-sm font-medium text-sky-700">{format(selectedDate, "MMM d")}</span>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1">
+                <button type="button" onClick={() => setType("bill")} className={`rounded px-3 py-2 text-sm font-medium ${type === "bill" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                  Expense
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType("income");
+                    setRecurrence("");
+                    setAutopay(false);
+                  }}
+                  className={`rounded px-3 py-2 text-sm font-medium ${type === "income" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  Deposit
+                </button>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-600">{type === "income" ? "Deposit source" : "Expense name"}</span>
+                <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Amount</span>
+                  <input type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Repeats</span>
+                  <select value={recurrence} onChange={(event) => setRecurrence(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
+                    {recurrenceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className={`grid gap-3 ${type === "bill" ? "grid-cols-2" : "grid-cols-1"}`}>
+                {type === "bill" && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">Priority</span>
+                    <select value={priority} onChange={(event) => setPriority(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
+                      <option value="critical">Critical</option>
+                      <option value="normal">Normal</option>
+                      <option value="flexible">Flexible</option>
+                    </select>
+                  </label>
+                )}
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Account</span>
+                  <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
+                    <option value="">No account</option>
+                    {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              {type === "bill" && (
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <input type="checkbox" checked={autopay} onChange={(event) => setAutopay(event.target.checked)} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
+                  Autopay
+                </label>
+              )}
+            </div>
+            <button disabled={!name.trim() || !amount || saving} className="mt-4 w-full rounded-md bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50">
+              {saving ? "Saving..." : `Add ${recurrence ? "recurring " : ""}${type === "income" ? "deposit" : "expense"}`}
+            </button>
+          </form>
+        </aside>
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-0 sm:items-center sm:justify-center sm:p-4">
+          <form onSubmit={saveEdit} className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Edit calendar item</h2>
+                <p className="mt-1 text-sm text-slate-500">Changes default to this occurrence only.</p>
+              </div>
+              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100">
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="block sm:col-span-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
+                <input value={editName} onChange={(event) => setEditName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amount</span>
+                <input type="number" min="0" step="0.01" value={editAmount} onChange={(event) => setEditAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</span>
+                <input type="date" value={editDate} onChange={(event) => setEditDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+                <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as CommitmentInstance["status"])} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500">
+                  {statuses.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Apply to</span>
+                <select value={editScope} onChange={(event) => setEditScope(event.target.value as "instance" | "future" | "template")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500">
+                  <option value="instance">This occurrence only</option>
+                  <option value="future">This and future occurrences</option>
+                  <option value="template">Recurring template</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={deleteEditing} disabled={saving} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 sm:mr-auto">
+                Delete occurrence
+              </button>
+              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+                Cancel
+              </button>
+              <button disabled={saving} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+                {saving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }

@@ -83,7 +83,7 @@ export async function getEligibleInstances(userId: string): Promise<CommitmentIn
     const instances = await listInstancesForCommitment(userId, commitment.id, windowEndStr);
     rows.push(
       ...instances
-        .filter((i) => i.status === "open" && i.due_date <= windowEndStr)
+        .filter((i) => !["paid", "funded", "skipped", "deferred"].includes(i.status) && i.due_date <= windowEndStr)
         .map((i) => ({ ...i, commitment_name: commitment.name, commitment_type: commitment.type }))
     );
   }

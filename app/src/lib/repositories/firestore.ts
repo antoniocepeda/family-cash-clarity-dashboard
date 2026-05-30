@@ -92,17 +92,24 @@ function normalizeCommitment(id: string, data: FirebaseFirestore.DocumentData): 
 function normalizeInstance(id: string, data: FirebaseFirestore.DocumentData): CommitmentInstance {
   const planned = Number(data.planned_amount ?? data.plannedAmount ?? 0);
   const allocated = Number(data.allocated_amount ?? data.allocatedAmount ?? 0);
+  const dueDate = String(data.due_date ?? data.dueDate ?? "");
   return {
     id,
     commitment_id: String(data.commitment_id ?? data.commitmentId ?? ""),
-    due_date: String(data.due_date ?? data.dueDate ?? ""),
+    due_date: dueDate,
+    override_due_date: (data.override_due_date ?? data.overrideDueDate ?? null) as string | null,
+    original_due_date: String(data.original_due_date ?? data.originalDueDate ?? data.template_due_date ?? dueDate),
     planned_amount: planned,
+    actual_amount: data.actual_amount === undefined && data.actualAmount === undefined ? null : Number(data.actual_amount ?? data.actualAmount),
     allocated_amount: allocated,
     remaining_amount: planned - allocated,
     status: (data.status ?? "open") as CommitmentInstance["status"],
+    edited_from_template: Boolean(data.edited_from_template ?? data.editedFromTemplate ?? false),
+    paid_date: (data.paid_date ?? data.paidDate ?? null) as string | null,
     created_at: data.created_at as string | undefined,
     commitment_name: data.commitment_name as string | undefined,
     commitment_type: data.commitment_type as CommitmentInstance["commitment_type"],
+    name_override: (data.name_override ?? data.nameOverride ?? null) as string | null,
   };
 }
 
@@ -310,13 +317,15 @@ export async function ensureInstance(userId: string, commitmentId: string, dueDa
       commitmentId,
       due_date: dueDate,
       dueDate,
+      original_due_date: dueDate,
+      originalDueDate: dueDate,
       planned_amount: plannedAmount,
       plannedAmount,
       allocated_amount: 0,
       allocatedAmount: 0,
       remaining_amount: plannedAmount,
       remainingAmount: plannedAmount,
-      status: "open",
+      status: "planned",
     }
   );
   return id;
@@ -341,7 +350,7 @@ export async function listInstancesForCommitment(userId: string, commitmentId: s
     .get();
   return snap.docs
     .map((d) => normalizeInstance(d.id, d.data()))
-    .filter((i) => i.due_date <= endDate)
+    .filter((i) => i.due_date <= endDate || i.original_due_date <= endDate)
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
 }
 
@@ -352,7 +361,7 @@ async function setInstanceAmounts(
   allocated: number,
   status?: CommitmentInstance["status"]
 ) {
-  const newStatus = status ?? (allocated >= planned - 0.005 ? "funded" : "open");
+  const newStatus = status ?? (allocated >= planned - 0.005 ? "paid" : allocated > 0.005 ? "partially_funded" : "planned");
   await collection(userId, COLLECTIONS.commitmentInstances).doc(id).set(
     {
       ...stampUpdate(),
@@ -375,6 +384,80 @@ export async function updateInstancePlan(userId: string, commitmentId: string, d
   const snap = await collection(userId, COLLECTIONS.commitmentInstances).doc(id).get();
   const inst = normalizeInstance(snap.id, snap.data()!);
   await setInstanceAmounts(userId, id, plannedAmount, inst.allocated_amount);
+}
+
+export async function updateCommitmentInstance(
+  userId: string,
+  input: {
+    commitment_id: string;
+    original_due_date: string;
+    due_date: string;
+    planned_amount: number;
+    status: CommitmentInstance["status"];
+    scope: "instance" | "future" | "template";
+    name?: string;
+  }
+) {
+  const commitment = await getCommitment(userId, input.commitment_id);
+  if (!commitment) throw new Error("Commitment not found");
+  if (!input.original_due_date || !input.due_date) throw new Error("Due dates are required");
+  if (!Number.isFinite(input.planned_amount) || input.planned_amount < 0) throw new Error("planned_amount must be non-negative");
+
+  if (input.scope === "template") {
+    return updateCommitment(userId, {
+      ...commitment,
+      name: input.name?.trim() || commitment.name,
+      amount: input.planned_amount,
+      due_date: input.due_date,
+    });
+  }
+
+  const id = await ensureInstance(userId, input.commitment_id, input.original_due_date, commitment.amount);
+  const existingSnap = await collection(userId, COLLECTIONS.commitmentInstances).doc(id).get();
+  const existing = existingSnap.exists ? normalizeInstance(existingSnap.id, existingSnap.data()!) : null;
+  const allocated = existing?.allocated_amount ?? 0;
+  await collection(userId, COLLECTIONS.commitmentInstances).doc(id).set(
+    {
+      ...stampUpdate(),
+      due_date: input.due_date,
+      dueDate: input.due_date,
+      override_due_date: input.due_date === input.original_due_date ? null : input.due_date,
+      overrideDueDate: input.due_date === input.original_due_date ? null : input.due_date,
+      original_due_date: input.original_due_date,
+      originalDueDate: input.original_due_date,
+      planned_amount: input.planned_amount,
+      plannedAmount: input.planned_amount,
+      actual_amount: input.status === "paid" ? input.planned_amount : null,
+      actualAmount: input.status === "paid" ? input.planned_amount : null,
+      remaining_amount: input.planned_amount - allocated,
+      remainingAmount: input.planned_amount - allocated,
+      status: input.status,
+      edited_from_template:
+        input.due_date !== input.original_due_date ||
+        Math.abs(input.planned_amount - commitment.amount) > 0.005 ||
+        Boolean(input.name?.trim() && input.name.trim() !== commitment.name),
+      editedFromTemplate:
+        input.due_date !== input.original_due_date ||
+        Math.abs(input.planned_amount - commitment.amount) > 0.005 ||
+        Boolean(input.name?.trim() && input.name.trim() !== commitment.name),
+      name_override: input.name?.trim() && input.name.trim() !== commitment.name ? input.name.trim() : null,
+      nameOverride: input.name?.trim() && input.name.trim() !== commitment.name ? input.name.trim() : null,
+      paid_date: input.status === "paid" ? format(new Date(), "yyyy-MM-dd") : null,
+      paidDate: input.status === "paid" ? format(new Date(), "yyyy-MM-dd") : null,
+    },
+    { merge: true }
+  );
+
+  if (input.scope === "future") {
+    await updateCommitment(userId, {
+      ...commitment,
+      name: input.name?.trim() || commitment.name,
+      amount: input.planned_amount,
+      due_date: input.due_date,
+    });
+  }
+
+  return getInstance(userId, input.commitment_id, input.original_due_date);
 }
 
 async function adjustAccountBalance(userId: string, accountId: string, delta: number) {
@@ -417,7 +500,7 @@ async function reverseAllocations(userId: string, ledgerId: string) {
     const instSnap = await instRef.get();
     if (instSnap.exists) {
       const inst = normalizeInstance(instSnap.id, instSnap.data()!);
-      await setInstanceAmounts(userId, inst.id, inst.planned_amount, Math.max(0, inst.allocated_amount - alloc.amount), "open");
+      await setInstanceAmounts(userId, inst.id, inst.planned_amount, Math.max(0, inst.allocated_amount - alloc.amount), "planned");
     }
     await doc.ref.delete();
   }
@@ -785,7 +868,7 @@ export async function markCommitmentPaid(userId: string, id: string, actualAmoun
   });
   await applyAllocations(userId, ledgerId, [{ commitment_id: commitment.id, instance_due_date: dueDate, amount: actualAmount, note }]);
   const inst = await getInstance(userId, commitment.id, dueDate);
-  if (inst?.status === "funded") {
+  if (inst?.status === "paid" || inst?.status === "funded") {
     const { advanceByRule } = await import("@/lib/instances");
     const { parseISO } = await import("date-fns");
     if (commitment.recurrence_rule) {
@@ -809,7 +892,7 @@ export async function advanceCommitment(userId: string, id: string, instanceDueD
   const dueDate = instanceDueDate || commitment.due_date;
   const instId = await ensureInstance(userId, commitment.id, dueDate, commitment.amount);
   const inst = (await getInstance(userId, commitment.id, dueDate))!;
-  await setInstanceAmounts(userId, instId, inst.planned_amount, inst.allocated_amount, "funded");
+  await setInstanceAmounts(userId, instId, inst.planned_amount, inst.allocated_amount, "paid");
   if (commitment.recurrence_rule) {
     const { advanceByRule } = await import("@/lib/instances");
     const { parseISO } = await import("date-fns");

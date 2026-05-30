@@ -61,11 +61,11 @@ function expandCommitmentOccurrences(
   const rule = commitment.recurrence_rule;
 
   const findInstance = (dateStr: string) =>
-    commitment.instances?.find((i) => i.due_date === dateStr) || null;
+    commitment.instances?.find((i) => (i.original_due_date || i.due_date) === dateStr) || null;
 
   if (!rule) {
     const inst = findInstance(commitment.due_date);
-    rows.push({ commitment, occurrenceDate: baseDate, isFirstOccurrence: true, instance: inst });
+    rows.push({ commitment, occurrenceDate: inst ? parseISO(inst.due_date) : baseDate, isFirstOccurrence: true, instance: inst });
     return rows;
   }
 
@@ -74,10 +74,10 @@ function expandCommitmentOccurrences(
   if (isBefore(baseDate, windowStart)) {
     const dateStr = format(baseDate, "yyyy-MM-dd");
     const inst = findInstance(dateStr);
-    if (!inst || inst.status !== "funded") {
+    if (!inst || !["paid", "funded", "skipped"].includes(inst.status)) {
       rows.push({
         commitment,
-        occurrenceDate: baseDate,
+        occurrenceDate: inst ? parseISO(inst.due_date) : baseDate,
         isFirstOccurrence: true,
         instance: inst,
       });
@@ -94,7 +94,7 @@ function expandCommitmentOccurrences(
     const inst = findInstance(dateStr);
     rows.push({
       commitment,
-      occurrenceDate: cursor,
+      occurrenceDate: inst ? parseISO(inst.due_date) : cursor,
       isFirstOccurrence: isFirst && isEqual(cursor, baseDate),
       instance: inst,
     });
@@ -164,7 +164,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
               const planned = instance?.planned_amount ?? commitment.amount;
               const allocated = instance?.allocated_amount ?? 0;
               const remaining = planned - allocated;
-              const isFunded = instance?.status === "funded" || remaining <= 0.005;
+              const isFunded = instance?.status === "paid" || instance?.status === "funded" || instance?.status === "skipped" || remaining <= 0.005;
               const progressPct = planned > 0 ? Math.min(100, (allocated / planned) * 100) : 0;
 
               return (

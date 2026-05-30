@@ -2,24 +2,21 @@
 
 import { useEffect, useState, useCallback } from "react";
 import CashPositionStrip from "@/components/CashPositionStrip";
-import RiskBanner from "@/components/RiskBanner";
-import NextBills from "@/components/NextBills";
 import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
+import RunwayView from "@/components/RunwayView";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { Account, CommitmentWithInstances, AllocationInput, LedgerItemInput, ProjectionDay, Alert } from "@/lib/types";
+import { Account, AllocationInput, CommitmentInstance, LedgerItemInput, ProjectionDay } from "@/lib/types";
 
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
   const [trendProjection, setTrendProjection] = useState<ProjectionDay[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [projectionDays, setProjectionDays] = useState<28 | 60 | 90 | 120 | 150 | 180>(28);
+  const [projectionDays, setProjectionDays] = useState<14 | 30 | 60 | 90 | 120 | 150 | 180>(30);
 
   const fetchProjection = useCallback(async (days?: number) => {
     const params = new URLSearchParams();
@@ -30,23 +27,15 @@ export default function Dashboard() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [acctRes, cmtRes, proj, trendProj, alertRes] = await Promise.all([
+      const [acctRes, proj, trendProj] = await Promise.all([
         authFetch("/api/accounts"),
-        authFetch("/api/commitments"),
         fetchProjection(),
         fetchProjection(180),
-        authFetch("/api/alerts"),
       ]);
-      const [accts, cmts, alts] = await Promise.all([
-        readJsonArray<Account>(acctRes, "Accounts fetch"),
-        readJsonArray<CommitmentWithInstances>(cmtRes, "Commitments fetch"),
-        readJsonArray<Alert>(alertRes, "Alerts fetch"),
-      ]);
+      const [accts] = await Promise.all([readJsonArray<Account>(acctRes, "Accounts fetch")]);
       setAccounts(accts);
-      setCommitments(cmts);
       setProjection(proj);
       setTrendProjection(trendProj);
-      setAlerts(alts);
       setLastUpdated(new Date().toISOString());
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -59,9 +48,25 @@ export default function Dashboard() {
     fetchAll();
   }, [fetchAll]);
 
-  const handleProjectionDaysChange = (days: 28 | 60 | 90 | 120 | 150 | 180) => {
+  const handleProjectionDaysChange = (days: 14 | 30 | 60 | 90 | 120 | 150 | 180) => {
     setProjectionDays(days);
     fetchProjection(days).then(setProjection);
+  };
+
+  const handleUpdateInstance = async (data: {
+    commitment_id: string;
+    original_due_date: string;
+    due_date: string;
+    planned_amount: number;
+    status: CommitmentInstance["status"];
+    scope: "instance" | "future" | "template";
+  }) => {
+    await authFetch("/api/commitment-instances", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    fetchAll();
   };
 
   const handleAddCommitment = async (data: {
@@ -139,22 +144,20 @@ export default function Dashboard() {
       <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-6 flex-1 w-full">
         <CashPositionStrip accounts={accounts} projection={trendProjection} lastUpdated={lastUpdated} />
 
-        {alerts.filter((a) => a.severity === "critical" || a.severity === "warning").length > 0 && (
-          <RiskBanner alerts={alerts.filter((a) => a.severity !== "info")} />
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-          <div className="lg:col-span-1 flex flex-col">
-            <NextBills commitments={commitments} />
-          </div>
-          <div className="lg:col-span-2 flex flex-col">
-            <ProjectionChart
-              projection={projection}
-              projectionDays={projectionDays}
-              onDaysChange={handleProjectionDaysChange}
-            />
-          </div>
+        <div>
+          <ProjectionChart
+            projection={projection}
+            projectionDays={projectionDays}
+            onDaysChange={handleProjectionDaysChange}
+          />
         </div>
+
+        <RunwayView
+          projection={projection}
+          rangeDays={projectionDays === 14 || projectionDays === 30 || projectionDays === 60 ? projectionDays : 30}
+          onRangeChange={handleProjectionDaysChange}
+          onUpdateInstance={handleUpdateInstance}
+        />
 
         <div className="border-t border-slate-200 pt-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>

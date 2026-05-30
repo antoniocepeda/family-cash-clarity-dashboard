@@ -108,13 +108,19 @@ export interface CommitmentInstance {
   id: string;
   commitment_id: string;
   due_date: string;
+  override_due_date?: string | null;
+  original_due_date: string;
   planned_amount: number;
+  actual_amount?: number | null;
   allocated_amount: number;
   remaining_amount: number;
-  status: "open" | "funded";
+  status: "planned" | "paid" | "partially_funded" | "deferred" | "skipped" | "overdue" | "open" | "funded";
+  edited_from_template?: boolean;
+  paid_date?: string | null;
   created_at?: string;
   commitment_name?: string;
   commitment_type?: "income" | "bill";
+  name_override?: string | null;
 }
 
 export interface CommitmentAllocation {
@@ -141,7 +147,17 @@ export interface CommitmentWithInstances extends Commitment {
 export interface ProjectionDay {
   date: string;
   balance: number;
-  commitments: { name: string; amount: number; type: string; priority: string }[];
+  commitments: {
+    commitment_id?: string;
+    name: string;
+    amount: number;
+    type: string;
+    priority: string;
+    due_date?: string;
+    original_due_date?: string;
+    status?: CommitmentInstance["status"];
+    paid_date?: string | null;
+  }[];
 }
 
 export interface Alert {

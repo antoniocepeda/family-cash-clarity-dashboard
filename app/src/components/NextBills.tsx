@@ -22,7 +22,7 @@ export default function NextBills({ commitments }: Props) {
 
   const isFunded = (c: CommitmentWithInstances) => {
     const inst = c.instances?.find((i) => i.due_date === c.due_date);
-    if (inst?.status === "funded") return true;
+    if (inst?.status === "funded" || inst?.status === "paid" || inst?.status === "skipped") return true;
     return getRemaining(c) <= 0.005;
   };
 

@@ -92,13 +92,20 @@ export function withAuth<Context extends object = object>(handler: AuthedHandler
 
       return await handler(req, { ...(context ?? ({} as Context)), user });
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       console.error("Authenticated API route failed:", {
         method: req.method,
         path: new URL(req.url).pathname,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage,
       });
 
-      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "Internal server error",
+          ...(process.env.NODE_ENV === "development" ? { detail: errorMessage } : {}),
+        },
+        { status: 500 }
+      );
     }
   };
 }
