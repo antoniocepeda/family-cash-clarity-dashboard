@@ -17,13 +17,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
   const [projectionDays, setProjectionDays] = useState<14 | 30 | 60 | 90 | 120 | 150 | 180>(30);
+  const [includePending, setIncludePending] = useState(true);
 
-  const fetchProjection = useCallback(async (days?: number) => {
+  const fetchProjection = useCallback(async (days?: number, pending?: boolean) => {
     const params = new URLSearchParams();
     params.set("days", String(days ?? projectionDays));
+    params.set("include_pending", (pending ?? includePending) ? "1" : "0");
     const res = await authFetch(`/api/projections?${params.toString()}`);
     return readJsonArray<ProjectionDay>(res, "Projection fetch");
-  }, [projectionDays]);
+  }, [projectionDays, includePending]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -51,6 +53,11 @@ export default function Dashboard() {
   const handleProjectionDaysChange = (days: 14 | 30 | 60 | 90 | 120 | 150 | 180) => {
     setProjectionDays(days);
     fetchProjection(days).then(setProjection);
+  };
+
+  const handleIncludePendingChange = (next: boolean) => {
+    setIncludePending(next);
+    fetchProjection(projectionDays, next).then(setProjection);
   };
 
   const handleUpdateInstance = async (data: {
@@ -149,6 +156,8 @@ export default function Dashboard() {
             projection={projection}
             projectionDays={projectionDays}
             onDaysChange={handleProjectionDaysChange}
+            includePending={includePending}
+            onIncludePendingChange={handleIncludePendingChange}
           />
         </div>
 

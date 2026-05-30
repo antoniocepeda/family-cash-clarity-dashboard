@@ -7,7 +7,8 @@ async function handleGET(req: NextRequest, { user }: { user: DecodedIdToken }) {
   const { searchParams } = new URL(req.url);
   const days = parseInt(searchParams.get("days") || "28", 10);
   const simulateEarlyIds = searchParams.get("simulate_early")?.split(",").filter(Boolean) ?? [];
-  return NextResponse.json(await generateProjection(user.uid, days, simulateEarlyIds));
+  const includePending = searchParams.get("include_pending") === "1";
+  return NextResponse.json(await generateProjection(user.uid, days, simulateEarlyIds, includePending));
 }
 
 export const GET = withAuth(handleGET);

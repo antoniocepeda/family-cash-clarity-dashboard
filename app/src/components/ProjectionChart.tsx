@@ -20,6 +20,8 @@ interface Props {
   projection: ProjectionDay[];
   projectionDays?: TimeRange;
   onDaysChange?: (days: TimeRange) => void;
+  includePending?: boolean;
+  onIncludePendingChange?: (include: boolean) => void;
 }
 
 const timeRangeOptions: { value: TimeRange; label: string }[] = [
@@ -31,7 +33,13 @@ const timeRangeOptions: { value: TimeRange; label: string }[] = [
   { value: 180, label: "6 Months" },
 ];
 
-export default function ProjectionChart({ projection, projectionDays = 30, onDaysChange }: Props) {
+export default function ProjectionChart({
+  projection,
+  projectionDays = 30,
+  onDaysChange,
+  includePending = true,
+  onIncludePendingChange,
+}: Props) {
   if (projection.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400">
@@ -87,6 +95,17 @@ export default function ProjectionChart({ projection, projectionDays = 30, onDay
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold text-slate-800">Cash Projection</h2>
+          {onIncludePendingChange && (
+            <label className="ml-1 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={includePending}
+                onChange={(e) => onIncludePendingChange(e.target.checked)}
+                className="rounded border-slate-300"
+              />
+              Include pending
+            </label>
+          )}
           {hasNegative && dangerDay && (
             <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
               Goes negative {format(parseISO(dangerDay.date), "MMM d")}

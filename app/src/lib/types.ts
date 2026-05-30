@@ -62,6 +62,7 @@ export interface LedgerEntry {
   commitment_id: string | null;
   created_at: string;
   plaid_transaction_id?: string | null;
+  plaid_pending_transaction_id?: string | null;
   pending?: boolean;
   removed?: boolean;
   allocations?: CommitmentAllocation[];

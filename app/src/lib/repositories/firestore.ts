@@ -124,6 +124,7 @@ function normalizeLedger(id: string, data: FirebaseFirestore.DocumentData): Ledg
     commitment_id: (data.commitment_id ?? data.commitmentId ?? null) as string | null,
     created_at: String(data.created_at ?? data.createdAt ?? new Date().toISOString()),
     plaid_transaction_id: (data.plaid_transaction_id ?? data.plaidTransactionId ?? null) as string | null,
+    plaid_pending_transaction_id: (data.plaid_pending_transaction_id ?? data.plaidPendingTransactionId ?? null) as string | null,
     pending: Boolean(data.pending ?? false),
     removed: Boolean(data.removed ?? false),
   };
@@ -771,6 +772,7 @@ export async function upsertPlaidLedgerTransaction(
   userId: string,
   input: {
     plaidTransactionId: string;
+    plaidPendingTransactionId?: string | null;
     plaidAccountId: string;
     appAccountId: string;
     date: string;
@@ -779,10 +781,16 @@ export async function upsertPlaidLedgerTransaction(
     pending: boolean;
   }
 ) {
-  const existing = await collection(userId, COLLECTIONS.ledger)
+  let existing = await collection(userId, COLLECTIONS.ledger)
     .where("plaid_transaction_id", "==", input.plaidTransactionId)
     .limit(1)
     .get();
+  if (existing.empty && input.plaidPendingTransactionId) {
+    existing = await collection(userId, COLLECTIONS.ledger)
+      .where("plaid_transaction_id", "==", input.plaidPendingTransactionId)
+      .limit(1)
+      .get();
+  }
   const id = existing.docs[0]?.id ?? randomUUID();
   const existingData = existing.docs[0]?.data();
   const signedAmount = Math.abs(input.amount);
@@ -801,6 +809,8 @@ export async function upsertPlaidLedgerTransaction(
       commitmentId: existingData?.commitmentId ?? null,
       plaid_transaction_id: input.plaidTransactionId,
       plaidTransactionId: input.plaidTransactionId,
+      plaid_pending_transaction_id: input.plaidPendingTransactionId ?? null,
+      plaidPendingTransactionId: input.plaidPendingTransactionId ?? null,
       plaid_account_id: input.plaidAccountId,
       pending: input.pending,
       removed: false,

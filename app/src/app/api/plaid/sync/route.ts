@@ -71,6 +71,7 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
           if (!appAccountId) continue;
           const result = await upsertPlaidLedgerTransaction(user.uid, {
             plaidTransactionId: transaction.transaction_id,
+            plaidPendingTransactionId: transaction.pending_transaction_id ?? null,
             plaidAccountId: transaction.account_id,
             appAccountId,
             date: transaction.date,
@@ -87,6 +88,7 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
           if (!appAccountId) continue;
           await upsertPlaidLedgerTransaction(user.uid, {
             plaidTransactionId: transaction.transaction_id,
+            plaidPendingTransactionId: transaction.pending_transaction_id ?? null,
             plaidAccountId: transaction.account_id,
             appAccountId,
             date: transaction.date,

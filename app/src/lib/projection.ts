@@ -1,6 +1,6 @@
 import { addDays, format, parseISO, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 import { advanceByRule } from "./instances";
-import { listAccounts, listCommitments, listInstances } from "./repositories/firestore";
+import { listAccounts, listCommitments, listInstances, listLedger } from "./repositories/firestore";
 
 interface CommitmentRow {
   id: string;
@@ -65,7 +65,12 @@ export function expandRecurrence(commitment: CommitmentRow, startDate: Date, end
   return dates;
 }
 
-export async function generateProjection(userId: string, days: number = 28, simulateEarlyIds: string[] = []): Promise<ProjectionDay[]> {
+export async function generateProjection(
+  userId: string,
+  days: number = 28,
+  simulateEarlyIds: string[] = [],
+  includePending = false
+): Promise<ProjectionDay[]> {
   const accounts = await listAccounts(userId);
   const commitments = await listCommitments(userId);
   const instanceRows = await listInstances(userId);
@@ -143,6 +148,35 @@ export async function generateProjection(userId: string, days: number = 28, simu
         original_due_date: originalDueDate,
         status: instance?.status ?? "planned",
         paid_date: instance?.paid_date,
+      });
+
+      for (let j = dayMap.size - 1; j >= 0; j--) {
+        const checkDate = format(addDays(today, j), "yyyy-MM-dd");
+        const checkDay = dayMap.get(checkDate);
+        if (checkDay && checkDate >= key) {
+          checkDay.balance += impact;
+        }
+      }
+    }
+  }
+
+  if (includePending) {
+    const pendingEntries = (await listLedger(userId)).filter((entry) => entry.pending && !entry.removed);
+    for (const entry of pendingEntries) {
+      const entryDate = startOfDay(parseISO(entry.date));
+      const effectiveDate = isBefore(entryDate, today) ? today : entryDate;
+      const key = format(effectiveDate, "yyyy-MM-dd");
+      const day = dayMap.get(key);
+      if (!day) continue;
+
+      const impact = entry.type === "income" ? entry.amount : -entry.amount;
+      day.commitments.push({
+        name: `${entry.description} (pending)`,
+        amount: entry.amount,
+        type: entry.type,
+        priority: "tentative",
+        due_date: key,
+        status: "planned",
       });
 
       for (let j = dayMap.size - 1; j >= 0; j--) {
