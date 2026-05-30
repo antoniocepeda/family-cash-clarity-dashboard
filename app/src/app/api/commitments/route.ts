@@ -7,7 +7,8 @@ import { addDays, startOfDay } from "date-fns";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
 async function handleGET(_req: NextRequest, { user }: { user: DecodedIdToken }) {
-  const commitments = await listCommitments(user.uid);
+  const includeInactive = new URL(_req.url).searchParams.get("include_inactive") === "1";
+  const commitments = await listCommitments(user.uid, !includeInactive);
   const allInstances = await getAllInstancesForCommitments(user.uid, addDays(startOfDay(new Date()), 28));
   const instanceMap = new Map<string, CommitmentInstance[]>();
   for (const inst of allInstances) {

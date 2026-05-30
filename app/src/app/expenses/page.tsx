@@ -19,7 +19,7 @@ export default function ExpensesPage() {
     try {
       const [accountRes, commitmentRes] = await Promise.all([
         authFetch("/api/accounts"),
-        authFetch("/api/commitments"),
+        authFetch("/api/commitments?include_inactive=1"),
       ]);
       const [accts, cmts] = await Promise.all([
         readJsonArray<Account>(accountRes, "Accounts fetch"),
@@ -56,13 +56,16 @@ export default function ExpensesPage() {
     recurrence_rule: string;
     priority: string;
     autopay: boolean;
-    account_id: string;
     type: "bill" | "income";
   }) => {
+    const accountId = accounts[0]?.id ?? "";
     await authFetch("/api/commitments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(expense),
+      body: JSON.stringify({
+        ...expense,
+        account_id: accountId,
+      }),
     });
     await fetchCommitments();
   };
@@ -137,10 +140,8 @@ export default function ExpensesPage() {
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1 space-y-6">
+      <main className="mx-auto max-w-[96vw] px-4 sm:px-6 py-6 flex-1 space-y-6">
         <CashCalendar
-          accounts={accounts}
-          commitments={commitments}
           projection={projection}
           onAddEvent={handleAddCashEvent}
           onUpdateInstance={handleUpdateInstance}

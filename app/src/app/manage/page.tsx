@@ -85,9 +85,7 @@ export default function ManagePage() {
         {tab === "commitments" && (
           <CommitmentsManager commitments={commitments} accounts={accounts} onRefresh={fetchData} />
         )}
-        {tab === "help" && <HelpGuide />}
-
-        {tab !== "help" && <DangerZone onRefresh={fetchData} />}
+        {tab === "help" && <HelpGuide onRefresh={fetchData} />}
       </main>
     </>
   );
@@ -659,12 +657,10 @@ function CommitmentsManager({
   );
 }
 
-/* ─── Danger Zone ─── */
+/* ─── Reset Data ─── */
 
-function DangerZone({ onRefresh }: { onRefresh: () => void }) {
+function ResetDataCard({ onRefresh }: { onRefresh: () => void }) {
   const [confirmText, setConfirmText] = useState("");
-  const [seedBalance, setSeedBalance] = useState("");
-  const [showSeedPrompt, setShowSeedPrompt] = useState(false);
 
   const handleReset = async () => {
     if (confirmText !== "RESET") return;
@@ -673,48 +669,24 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
     onRefresh();
   };
 
-  const handleSeed = async () => {
-    const balance = parseFloat(seedBalance);
-    if (isNaN(balance)) return;
-    await authFetch("/api/seed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ checking_balance: balance }),
-    });
-    setSeedBalance("");
-    setShowSeedPrompt(false);
-    onRefresh();
-  };
-
   return (
-    <div className="rounded-2xl border-2 border-dashed border-red-200 bg-red-50/50 p-6 space-y-4 mt-8">
-      <h2 className="text-lg font-semibold text-red-800">Danger Zone</h2>
-      <p className="text-sm text-red-700/70">These actions are destructive. Use them to start fresh with your real data.</p>
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 space-y-2">
-          <p className="text-sm font-medium text-red-800">Clear all data &amp; start fresh</p>
-          <p className="text-xs text-red-600/70">Type <strong>RESET</strong> to confirm. This deletes all accounts, expenses, and alerts.</p>
-          <div className="flex items-center gap-2">
-            <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder='Type "RESET"' className="rounded-lg border border-red-300 px-3 py-2 text-sm w-36 outline-none focus:ring-2 focus:ring-red-500" />
-            <button onClick={handleReset} disabled={confirmText !== "RESET"} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Clear Everything</button>
-          </div>
-        </div>
-        <div className="flex-1 space-y-2">
-          <p className="text-sm font-medium text-red-800">Load my default bills</p>
-          <p className="text-xs text-red-600/70">Replaces everything with your real monthly bills and paycheck. You&apos;ll enter your current checking balance first.</p>
-          {!showSeedPrompt ? (
-            <button onClick={() => setShowSeedPrompt(true)} className="px-4 py-2 text-sm font-semibold text-red-700 border border-red-300 bg-white rounded-lg hover:bg-red-50 transition-colors">Load Default Month</button>
-          ) : (
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-red-800">Current checking balance ($)</label>
-              <div className="flex items-center gap-2">
-                <input type="number" value={seedBalance} onChange={(e) => setSeedBalance(e.target.value)} placeholder="e.g. 3200.00" step="0.01" autoFocus className="rounded-lg border border-red-300 px-3 py-2 text-sm w-40 outline-none focus:ring-2 focus:ring-red-500" />
-                <button onClick={handleSeed} disabled={!seedBalance || isNaN(parseFloat(seedBalance))} className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">Seed &amp; Go</button>
-                <button onClick={() => { setShowSeedPrompt(false); setSeedBalance(""); }} className="px-3 py-2 text-sm text-red-600 hover:text-red-800 transition-colors">Cancel</button>
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="rounded-2xl border-2 border-dashed border-red-200 bg-red-50/50 p-6 space-y-3">
+      <h3 className="text-lg font-semibold text-red-800">Reset Data</h3>
+      <p className="text-sm text-red-700/70">Type <strong>RESET</strong> to clear all accounts, expenses, and alerts.</p>
+      <div className="flex items-center gap-2">
+        <input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder='Type "RESET"'
+          className="rounded-lg border border-red-300 px-3 py-2 text-sm w-36 outline-none focus:ring-2 focus:ring-red-500"
+        />
+        <button
+          onClick={handleReset}
+          disabled={confirmText !== "RESET"}
+          className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Clear Everything
+        </button>
       </div>
     </div>
   );
@@ -722,15 +694,18 @@ function DangerZone({ onRefresh }: { onRefresh: () => void }) {
 
 /* ─── Help Guide ─── */
 
-function HelpGuide() {
+function HelpGuide({ onRefresh }: { onRefresh: () => void }) {
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 p-6 text-white shadow-lg">
-      <h2 className="text-xl font-bold">Welcome to Cash Clarity</h2>
-      <p className="mt-1 text-sky-100 text-sm leading-relaxed max-w-2xl">
-        This dashboard helps your family see exactly where your cash stands — not just today,
-        but 28 days out. No guessing, no surprises. Check the Expenses tab to manage your
-        bills and income, or visit the Dashboard for a full overview.
-      </p>
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 p-6 text-white shadow-lg">
+        <h2 className="text-xl font-bold">Welcome to Cash Clarity</h2>
+        <p className="mt-1 text-sky-100 text-sm leading-relaxed max-w-2xl">
+          This dashboard helps your family see exactly where your cash stands — not just today,
+          but 28 days out. No guessing, no surprises. Check the Expenses tab to manage your
+          bills and income, or visit the Dashboard for a full overview.
+        </p>
+      </div>
+      <ResetDataCard onRefresh={onRefresh} />
     </div>
   );
 }

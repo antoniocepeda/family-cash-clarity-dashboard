@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   addMonths,
   eachDayOfInterval,
@@ -15,7 +15,7 @@ import {
   startOfToday,
   startOfWeek,
 } from "date-fns";
-import { Account, CommitmentInstance, CommitmentWithInstances, ProjectionDay } from "@/lib/types";
+import { CommitmentInstance, ProjectionDay } from "@/lib/types";
 
 interface NewCashEvent {
   name: string;
@@ -24,7 +24,6 @@ interface NewCashEvent {
   recurrence_rule: string;
   priority: string;
   autopay: boolean;
-  account_id: string;
   type: "bill" | "income";
 }
 
@@ -32,8 +31,6 @@ type EditableItem = ProjectionDay["commitments"][number];
 type RiskState = "safe" | "tight" | "below buffer" | "negative" | "overdue";
 
 interface Props {
-  accounts: Account[];
-  commitments: CommitmentWithInstances[];
   projection: ProjectionDay[];
   onAddEvent: (expense: NewCashEvent) => Promise<void>;
   onUpdateInstance: (input: {
@@ -112,16 +109,16 @@ function riskLabelClasses(risk: RiskState) {
   }
 }
 
-export default function CashCalendar({ accounts, projection, onAddEvent, onUpdateInstance, onDeleteInstance }: Props) {
+export default function CashCalendar({ projection, onAddEvent, onUpdateInstance, onDeleteInstance }: Props) {
   const [month, setMonth] = useState(startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showAddModal, setShowAddModal] = useState(false);
   const [type, setType] = useState<"bill" | "income">("bill");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [recurrence, setRecurrence] = useState("monthly");
   const [priority, setPriority] = useState("normal");
   const [autopay, setAutopay] = useState(false);
-  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EditableItem | null>(null);
   const [editName, setEditName] = useState("");
@@ -130,10 +127,6 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
   const [editStatus, setEditStatus] = useState<CommitmentInstance["status"]>("planned");
   const [editScope, setEditScope] = useState<"instance" | "future" | "template">("instance");
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!accountId && accounts[0]) setAccountId(accounts[0].id);
-  }, [accountId, accounts]);
 
   const calendarDays = useMemo(
     () =>
@@ -153,6 +146,16 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
   const selectedKey = format(selectedDate, "yyyy-MM-dd");
   const selectedDay = projectionByDate.get(selectedKey);
 
+  const openAddModal = (day: Date) => {
+    setSelectedDate(day);
+    setShowAddModal(true);
+  };
+
+  const closeAddModal = () => {
+    if (saving) return;
+    setShowAddModal(false);
+  };
+
   const saveEvent = async () => {
     const parsedAmount = parseFloat(amount);
     if (!name.trim() || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
@@ -166,7 +169,6 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
         recurrence_rule: recurrence,
         priority,
         autopay,
-        account_id: accountId,
         type,
       });
       setName("");
@@ -174,6 +176,7 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
       setRecurrence(type === "income" ? "" : "monthly");
       setPriority("normal");
       setAutopay(false);
+      setShowAddModal(false);
     } finally {
       setSaving(false);
     }
@@ -242,11 +245,11 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
   };
 
   return (
-    <section className="border-b border-slate-200 pb-6">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 xl:p-5">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Cash Calendar</h1>
-          <p className="mt-1 text-sm text-slate-500">Plan bills and income directly on the month view.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Cash Calendar</h1>
+          <p className="mt-1 text-sm text-slate-500">Click any date to add an expense or deposit. Drag items to move due dates.</p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-semibold">
           {(["safe", "tight", "below buffer", "negative", "overdue"] as RiskState[]).map((risk) => (
@@ -255,160 +258,136 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <div className="mb-3 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 sm:px-4">
+        <button
+          type="button"
+          onClick={() => setMonth(addMonths(month, -1))}
+          aria-label="Previous month"
+          className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+        >
+          <span aria-hidden="true">&lt;</span>
+        </button>
+        <h2 className="text-lg font-semibold tracking-wide text-slate-900">{format(month, "MMMM yyyy")}</h2>
+        <button
+          type="button"
+          onClick={() => setMonth(addMonths(month, 1))}
+          aria-label="Next month"
+          className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+        >
+          <span aria-hidden="true">&gt;</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+          <span key={day} className="py-2">{day}</span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        {calendarDays.map((day) => {
+          const dateKey = format(day, "yyyy-MM-dd");
+          const dayProjection = projectionByDate.get(dateKey);
+          const items = dayProjection?.commitments ?? [];
+          const visibleItems = items.slice(0, 3);
+          const risk = getRiskState(dayProjection);
+          const selected = isSameDay(day, selectedDate);
+
+          return (
             <button
               type="button"
-              onClick={() => setMonth(addMonths(month, -1))}
-              aria-label="Previous month"
-              className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+              key={dateKey}
+              onClick={() => {
+                setSelectedDate(day);
+                openAddModal(day);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const payload = event.dataTransfer.getData("application/json");
+                if (!payload) return;
+                void moveItem(JSON.parse(payload) as EditableItem, dateKey).finally(() => setDraggingKey(null));
+              }}
+              aria-pressed={selected}
+              className={`min-h-[180px] rounded-xl border p-2 text-left transition-colors hover:border-sky-300 sm:min-h-[170px] lg:min-h-[160px] xl:min-h-[185px] ${dayClasses(risk, isSameMonth(day, month), selected)}`}
             >
-              <span aria-hidden="true">&lt;</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-base font-bold text-slate-900">{format(day, "d")}</span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold capitalize ${riskLabelClasses(risk)}`}>
+                  {risk === "below buffer" ? "buffer" : risk}
+                </span>
+              </div>
+              <div className={`mt-1 text-xs font-semibold ${dayProjection && dayProjection.balance < 0 ? "text-red-700" : "text-slate-600"}`}>
+                End: {dayProjection ? money(dayProjection.balance) : "-"}
+              </div>
+              <div className="mt-2 space-y-1">
+                {visibleItems.map((item, index) => {
+                  const itemKey = `${item.commitment_id}-${item.original_due_date}-${index}`;
+                  const isIncome = item.type === "income";
+                  return (
+                    <span
+                      key={itemKey}
+                      role="button"
+                      tabIndex={0}
+                      draggable={Boolean(item.commitment_id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startEdit(item);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          startEdit(item);
+                        }
+                      }}
+                      onDragStart={(event) => {
+                        event.stopPropagation();
+                        setDraggingKey(itemKey);
+                        event.dataTransfer.setData("application/json", JSON.stringify(item));
+                      }}
+                      onDragEnd={() => setDraggingKey(null)}
+                      className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing ${
+                        isIncome
+                          ? "border-emerald-200 bg-white text-emerald-700"
+                          : "border-rose-200 bg-white text-rose-700"
+                      } ${draggingKey === itemKey ? "opacity-50" : ""}`}
+                    >
+                      <span className="block truncate text-slate-800">{item.name}</span>
+                      <span className="tabular-nums">{isIncome ? "+" : "-"}{money(item.amount, item.amount % 1 !== 0)}</span>
+                    </span>
+                  );
+                })}
+                {items.length > visibleItems.length && (
+                  <span className="block rounded bg-white/70 px-1.5 py-1 text-[11px] font-semibold text-slate-600">
+                    +{items.length - visibleItems.length} more
+                  </span>
+                )}
+              </div>
             </button>
-            <h2 className="text-base font-semibold text-slate-800">{format(month, "MMMM yyyy")}</h2>
-            <button
-              type="button"
-              onClick={() => setMonth(addMonths(month, 1))}
-              aria-label="Next month"
-              className="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-            >
-              <span aria-hidden="true">&gt;</span>
-            </button>
-          </div>
+          );
+        })}
+      </div>
 
-          <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase text-slate-400">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <span key={day} className="py-2">{day}</span>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-7 sm:gap-1.5">
-            {calendarDays.map((day) => {
-              const dateKey = format(day, "yyyy-MM-dd");
-              const dayProjection = projectionByDate.get(dateKey);
-              const items = dayProjection?.commitments ?? [];
-              const visibleItems = items.slice(0, 3);
-              const risk = getRiskState(dayProjection);
-              const selected = isSameDay(day, selectedDate);
-
-              return (
-                <button
-                  type="button"
-                  key={dateKey}
-                  onClick={() => setSelectedDate(day)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const payload = event.dataTransfer.getData("application/json");
-                    if (!payload) return;
-                    void moveItem(JSON.parse(payload) as EditableItem, dateKey).finally(() => setDraggingKey(null));
-                  }}
-                  aria-pressed={selected}
-                  className={`min-h-[132px] rounded-md border p-2 text-left transition-colors hover:border-sky-300 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-bold text-slate-900">{format(day, "d")}</span>
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold capitalize ${riskLabelClasses(risk)}`}>
-                      {risk === "below buffer" ? "buffer" : risk}
-                    </span>
-                  </div>
-                  <div className={`mt-1 text-[11px] font-semibold ${dayProjection && dayProjection.balance < 0 ? "text-red-700" : "text-slate-600"}`}>
-                    End: {dayProjection ? money(dayProjection.balance) : "-"}
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    {visibleItems.map((item, index) => {
-                      const itemKey = `${item.commitment_id}-${item.original_due_date}-${index}`;
-                      const isIncome = item.type === "income";
-                      return (
-                        <span
-                          key={itemKey}
-                          role="button"
-                          tabIndex={0}
-                          draggable={Boolean(item.commitment_id)}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            startEdit(item);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              startEdit(item);
-                            }
-                          }}
-                          onDragStart={(event) => {
-                            event.stopPropagation();
-                            setDraggingKey(itemKey);
-                            event.dataTransfer.setData("application/json", JSON.stringify(item));
-                          }}
-                          onDragEnd={() => setDraggingKey(null)}
-                          className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing ${
-                            isIncome
-                              ? "border-emerald-200 bg-white text-emerald-700"
-                              : "border-rose-200 bg-white text-rose-700"
-                          } ${draggingKey === itemKey ? "opacity-50" : ""}`}
-                        >
-                          <span className="block truncate text-slate-800">{item.name}</span>
-                          <span className="tabular-nums">{isIncome ? "+" : "-"}{money(item.amount, item.amount % 1 !== 0)}</span>
-                        </span>
-                      );
-                    })}
-                    {items.length > visibleItems.length && (
-                      <span className="block rounded bg-white/70 px-1.5 py-1 text-[11px] font-semibold text-slate-600">
-                        +{items.length - visibleItems.length} more
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h2 className="text-base font-semibold text-slate-800">{format(selectedDate, "EEE, MMM d")}</h2>
-              <span className="text-sm font-bold text-slate-700">
-                End {selectedDay ? money(selectedDay.balance, true) : "-"}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {(selectedDay?.commitments ?? []).length > 0 ? (
-                selectedDay?.commitments.map((item, index) => (
-                  <button
-                    key={`${item.commitment_id}-${item.original_due_date}-${index}`}
-                    type="button"
-                    onClick={() => startEdit(item)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-left hover:border-sky-300 hover:bg-sky-50"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-slate-900">{item.name}</span>
-                      <span className="text-xs capitalize text-slate-500">{item.status ?? "planned"}</span>
-                    </span>
-                    <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-emerald-700" : "text-rose-700"}`}>
-                      {item.type === "income" ? "+" : "-"}{money(item.amount, true)}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">No bills or income due.</p>
-              )}
-            </div>
-          </div>
-
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-900/50 p-0 sm:items-center sm:justify-center sm:p-4">
           <form
-            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-xl sm:rounded-2xl"
             onSubmit={(event) => {
               event.preventDefault();
               void saveEvent();
             }}
           >
-            <div className="mb-4 flex items-baseline justify-between gap-3">
-              <h2 className="text-base font-semibold text-slate-800">Add cash event</h2>
-              <span className="text-sm font-medium text-sky-700">{format(selectedDate, "MMM d")}</span>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Add cash event</h2>
+                <p className="mt-1 text-sm text-slate-500">{format(selectedDate, "EEEE, MMM d")}</p>
+              </div>
+              <button type="button" onClick={closeAddModal} className="rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100">
+                Close
+              </button>
             </div>
-            <div className="space-y-3">
+
+            <div className="mt-4 space-y-3">
               <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1">
                 <button type="button" onClick={() => setType("bill")} className={`rounded px-3 py-2 text-sm font-medium ${type === "bill" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
                   Expense
@@ -441,8 +420,8 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
                   </select>
                 </label>
               </div>
-              <div className={`grid gap-3 ${type === "bill" ? "grid-cols-2" : "grid-cols-1"}`}>
-                {type === "bill" && (
+              {type === "bill" && (
+                <div className="grid grid-cols-2 gap-3">
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium text-slate-600">Priority</span>
                     <select value={priority} onChange={(event) => setPriority(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
@@ -451,28 +430,20 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
                       <option value="flexible">Flexible</option>
                     </select>
                   </label>
-                )}
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Account</span>
-                  <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
-                    <option value="">No account</option>
-                    {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-                  </select>
-                </label>
-              </div>
-              {type === "bill" && (
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input type="checkbox" checked={autopay} onChange={(event) => setAutopay(event.target.checked)} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
-                  Autopay
-                </label>
+                  <label className="flex items-end gap-2 text-sm text-slate-600 pb-2">
+                    <input type="checkbox" checked={autopay} onChange={(event) => setAutopay(event.target.checked)} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
+                    Autopay
+                  </label>
+                </div>
               )}
             </div>
+
             <button disabled={!name.trim() || !amount || saving} className="mt-4 w-full rounded-md bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50">
               {saving ? "Saving..." : `Add ${recurrence ? "recurring " : ""}${type === "income" ? "deposit" : "expense"}`}
             </button>
           </form>
-        </aside>
-      </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-0 sm:items-center sm:justify-center sm:p-4">
@@ -528,6 +499,30 @@ export default function CashCalendar({ accounts, projection, onAddEvent, onUpdat
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {selectedDay && selectedDay.commitments.length > 0 && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="text-sm font-semibold text-slate-700">{format(selectedDate, "EEE, MMM d")} items</h3>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {selectedDay.commitments.map((item, index) => (
+              <button
+                key={`${item.commitment_id}-${item.original_due_date}-${index}`}
+                type="button"
+                onClick={() => startEdit(item)}
+                className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-left hover:border-sky-300 hover:bg-sky-50"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-slate-900">{item.name}</span>
+                  <span className="text-xs capitalize text-slate-500">{item.status ?? "planned"}</span>
+                </span>
+                <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-emerald-700" : "text-rose-700"}`}>
+                  {item.type === "income" ? "+" : "-"}{money(item.amount, true)}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </section>
