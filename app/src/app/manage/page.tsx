@@ -433,8 +433,6 @@ function CommitmentsManager({
     amount: "",
     due_date: new Date().toISOString().slice(0, 10),
     recurrence_rule: "",
-    priority: "normal",
-    autopay: false,
     account_id: "",
   });
 
@@ -504,7 +502,7 @@ function CommitmentsManager({
     setAdding(false);
     setCustomValue("");
     setCustomUnit("days");
-    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", priority: "normal", autopay: false, account_id: "" });
+    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", account_id: "" });
     onRefresh();
   };
 
@@ -529,7 +527,7 @@ function CommitmentsManager({
             </select>
             <input type="number" value={newCmt.amount} onChange={(e) => setNewCmt({ ...newCmt, amount: e.target.value })} placeholder="Amount" step="0.01" className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input type="date" value={newCmt.due_date} onChange={(e) => setNewCmt({ ...newCmt, due_date: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500" />
             <select value={newCmt.recurrence_rule} onChange={(e) => setNewCmt({ ...newCmt, recurrence_rule: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
               <option value="">One-time</option>
@@ -539,11 +537,6 @@ function CommitmentsManager({
               <option value="quarterly">Quarterly</option>
               <option value="annual">Annual</option>
               <option value="custom">Custom (every N days)</option>
-            </select>
-            <select value={newCmt.priority} onChange={(e) => setNewCmt({ ...newCmt, priority: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
-              <option value="critical">Critical</option>
-              <option value="normal">Normal</option>
-              <option value="flexible">Flexible</option>
             </select>
             <select value={newCmt.account_id} onChange={(e) => setNewCmt({ ...newCmt, account_id: e.target.value })} className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500">
               <option value="">No account</option>
@@ -562,11 +555,7 @@ function CommitmentsManager({
               </div>
             </div>
           )}
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-sm text-slate-600">
-              <input type="checkbox" checked={newCmt.autopay} onChange={(e) => setNewCmt({ ...newCmt, autopay: e.target.checked })} className="rounded border-slate-300" />
-              Autopay
-            </label>
+          <div>
             <button onClick={addCommitment} disabled={!newCmt.name || !newCmt.amount || (newCmt.recurrence_rule === "custom" && !customValue)} className="px-4 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 transition-colors">
               Add Expense
             </button>
@@ -584,8 +573,6 @@ function CommitmentsManager({
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Recurrence</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Priority</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Auto</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -611,8 +598,6 @@ function CommitmentsManager({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-2"><select value={form.priority || "normal"} onChange={(e) => setForm({ ...form, priority: e.target.value as Commitment["priority"] })} className="rounded border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-sky-500"><option value="critical">Critical</option><option value="normal">Normal</option><option value="flexible">Flexible</option></select></td>
-                    <td className="px-4 py-2"><input type="checkbox" checked={!!form.autopay} onChange={(e) => setForm({ ...form, autopay: e.target.checked ? 1 : 0 })} className="rounded border-slate-300" /></td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-2">
                         <button onClick={saveEdit} className="px-3 py-1 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors">Save</button>
@@ -633,10 +618,6 @@ function CommitmentsManager({
                     <td className="px-4 py-3 font-semibold tabular-nums text-slate-800">{cmt.type === "income" ? "+" : "−"}${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                     <td className="px-4 py-3 text-slate-600">{cmt.due_date}</td>
                     <td className="px-4 py-3 capitalize text-slate-500">{formatRecurrence(cmt.recurrence_rule)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${cmt.priority === "critical" ? "bg-red-100 text-red-700" : cmt.priority === "flexible" ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-600"}`}>{cmt.priority}</span>
-                    </td>
-                    <td className="px-4 py-3">{cmt.autopay ? (<span className="text-[10px] font-medium bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">AUTO</span>) : (<span className="text-xs text-slate-400">—</span>)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button onClick={() => startEdit(cmt)} className="px-3 py-1 text-xs font-medium text-sky-600 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors">Edit</button>
@@ -647,7 +628,7 @@ function CommitmentsManager({
                 )
               )}
               {commitments.length === 0 && (
-                <tr><td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">No expenses yet. Add your first bill or income above.</td></tr>
+                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-400">No expenses yet. Add your first bill or income above.</td></tr>
               )}
             </tbody>
           </table>

@@ -22,8 +22,6 @@ interface NewCashEvent {
   amount: number;
   due_date: string;
   recurrence_rule: string;
-  priority: string;
-  autopay: boolean;
   type: "bill" | "income";
 }
 
@@ -117,8 +115,6 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [recurrence, setRecurrence] = useState("monthly");
-  const [priority, setPriority] = useState("normal");
-  const [autopay, setAutopay] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EditableItem | null>(null);
   const [editName, setEditName] = useState("");
@@ -167,15 +163,11 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
         amount: parsedAmount,
         due_date: format(selectedDate, "yyyy-MM-dd"),
         recurrence_rule: recurrence,
-        priority,
-        autopay,
         type,
       });
       setName("");
       setAmount("");
       setRecurrence(type === "income" ? "" : "monthly");
-      setPriority("normal");
-      setAutopay(false);
       setShowAddModal(false);
     } finally {
       setSaving(false);
@@ -397,7 +389,6 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                   onClick={() => {
                     setType("income");
                     setRecurrence("");
-                    setAutopay(false);
                   }}
                   className={`rounded px-3 py-2 text-sm font-medium ${type === "income" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
                 >
@@ -420,22 +411,6 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                   </select>
                 </label>
               </div>
-              {type === "bill" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-slate-600">Priority</span>
-                    <select value={priority} onChange={(event) => setPriority(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
-                      <option value="critical">Critical</option>
-                      <option value="normal">Normal</option>
-                      <option value="flexible">Flexible</option>
-                    </select>
-                  </label>
-                  <label className="flex items-end gap-2 text-sm text-slate-600 pb-2">
-                    <input type="checkbox" checked={autopay} onChange={(event) => setAutopay(event.target.checked)} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
-                    Autopay
-                  </label>
-                </div>
-              )}
             </div>
 
             <button disabled={!name.trim() || !amount || saving} className="mt-4 w-full rounded-md bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50">

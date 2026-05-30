@@ -66,9 +66,7 @@ export default function NextBills({ commitments }: Props) {
                   className={`flex h-9 w-9 items-center justify-center rounded-lg text-white text-xs font-bold ${
                     item.type === "income"
                       ? "bg-emerald-500"
-                      : item.priority === "critical"
-                      ? "bg-red-500"
-                      : "bg-slate-400"
+                      : "bg-rose-500"
                   }`}
                 >
                   {daysUntil <= 0 ? "!" : `${daysUntil}d`}
@@ -77,7 +75,6 @@ export default function NextBills({ commitments }: Props) {
                   <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
                   <p className="text-xs text-slate-400">
                     {format(parseISO(item.due_date), "EEE, MMM d")}
-                    {item.autopay ? " · Autopay" : ""}
                   </p>
                 </div>
                 <span

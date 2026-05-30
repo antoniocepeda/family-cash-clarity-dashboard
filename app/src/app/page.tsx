@@ -82,8 +82,6 @@ export default function Dashboard() {
     amount: number;
     due_date: string;
     recurrence_rule: string;
-    priority: string;
-    autopay: boolean;
     account_id: string;
   }) => {
     await authFetch("/api/commitments", {

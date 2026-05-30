@@ -12,8 +12,6 @@ interface Props {
     amount: number;
     due_date: string;
     recurrence_rule: string;
-    priority: string;
-    autopay: boolean;
     account_id: string;
   }) => void;
   onReconcile: (id: string, balance: number) => void;
@@ -141,8 +139,6 @@ function CommitmentModal({
     amount: number;
     due_date: string;
     recurrence_rule: string;
-    priority: string;
-    autopay: boolean;
     account_id: string;
   }) => void;
 }) {
@@ -152,8 +148,6 @@ function CommitmentModal({
     amount: "",
     due_date: new Date().toISOString().slice(0, 10),
     recurrence_rule: "",
-    priority: "normal",
-    autopay: false,
     account_id: accounts[0]?.id || "",
   });
   const [customValue, setCustomValue] = useState("");
@@ -165,20 +159,12 @@ function CommitmentModal({
     <Overlay onClose={onClose}>
       <h3 className="text-lg font-semibold text-slate-800 mb-4">Add Bill or Income</h3>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
               <option value="bill">Bill / Expense</option>
               <option value="income">Income</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Priority</label>
-            <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
-              <option value="critical">Critical</option>
-              <option value="normal">Normal</option>
-              <option value="flexible">Flexible</option>
             </select>
           </div>
         </div>
@@ -237,10 +223,6 @@ function CommitmentModal({
             </select>
           </div>
         )}
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input type="checkbox" checked={form.autopay} onChange={(e) => setForm({ ...form, autopay: e.target.checked })} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
-          Autopay enabled
-        </label>
       </div>
       <div className="flex justify-end gap-3 mt-5">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>

@@ -54,8 +54,6 @@ export default function ExpensesPage() {
     amount: number;
     due_date: string;
     recurrence_rule: string;
-    priority: string;
-    autopay: boolean;
     type: "bill" | "income";
   }) => {
     const accountId = accounts[0]?.id ?? "";

@@ -38,12 +38,6 @@ interface Props {
   onSimulateToggle: (id: string) => void;
 }
 
-const priorityBadge = {
-  critical: "bg-red-100 text-red-700",
-  normal: "bg-slate-100 text-slate-600",
-  flexible: "bg-blue-100 text-blue-600",
-};
-
 interface OccurrenceRow {
   commitment: CommitmentWithInstances;
   occurrenceDate: Date;
@@ -150,7 +144,6 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
               <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
               <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Due</th>
               <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Recurrence</th>
-              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Priority</th>
               <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
             </tr>
           </thead>
@@ -180,11 +173,6 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                         }`}
                       />
                       <span className="font-medium text-slate-800">{commitment.name}</span>
-                      {commitment.autopay === 1 && (
-                        <span className="text-[10px] font-medium bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">
-                          AUTO
-                        </span>
-                      )}
                       {isFunded && (
                         <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
                           PAID
@@ -294,15 +282,6 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                       : commitment.recurrence_rule?.startsWith("every_") && commitment.recurrence_rule?.endsWith("_weeks")
                       ? `Every ${commitment.recurrence_rule.slice(6, -6)} weeks`
                       : commitment.recurrence_rule || "One-time"}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                        priorityBadge[commitment.priority]
-                      }`}
-                    >
-                      {commitment.priority}
-                    </span>
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
