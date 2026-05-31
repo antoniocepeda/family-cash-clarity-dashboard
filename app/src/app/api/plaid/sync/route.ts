@@ -30,6 +30,8 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
     modified: 0,
     removed: 0,
     pending: 0,
+    refresh_requested: 0,
+    refresh_skipped: 0,
     errors: [] as { item_id: string; error: string }[],
   };
 
@@ -55,6 +57,14 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
         });
         accountMap.set(account.account_id, appAccountId);
         summary.accounts += 1;
+      }
+
+      try {
+        await plaid.transactionsRefresh({ access_token: accessToken });
+        summary.refresh_requested += 1;
+      } catch {
+        // Plaid rate-limits on-demand refreshes; cursor sync can still import queued updates.
+        summary.refresh_skipped += 1;
       }
 
       let cursor = await getPlaidCursor(user.uid, item.item_id);

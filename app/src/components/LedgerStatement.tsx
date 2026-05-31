@@ -18,6 +18,14 @@ interface EditForm {
 }
 
 type PendingFilter = "all" | "pending" | "posted";
+type RecurrenceRule = "weekly" | "biweekly" | "monthly" | "quarterly" | "annual";
+
+interface ConvertForm {
+  name: string;
+  amount: string;
+  due_date: string;
+  recurrence_rule: RecurrenceRule;
+}
 
 export default function LedgerStatement({
   accounts,
@@ -37,6 +45,9 @@ export default function LedgerStatement({
   const [editForm, setEditForm] = useState<EditForm>({ description: "", amount: "", type: "expense" });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [convertingEntry, setConvertingEntry] = useState<LedgerEntry | null>(null);
+  const [convertForm, setConvertForm] = useState<ConvertForm | null>(null);
+  const [convertSaving, setConvertSaving] = useState(false);
 
   const accountMap = useMemo<AccountMap>(() => {
     const map: AccountMap = {};
@@ -127,6 +138,58 @@ export default function LedgerStatement({
       alert("Failed to update transaction");
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const startConvertToRecurring = (entry: LedgerEntry) => {
+    setConvertingEntry(entry);
+    setConvertForm({
+      name: entry.description,
+      amount: entry.amount.toFixed(2),
+      due_date: entry.date,
+      recurrence_rule: "monthly",
+    });
+  };
+
+  const cancelConvert = () => {
+    if (convertSaving) return;
+    setConvertingEntry(null);
+    setConvertForm(null);
+  };
+
+  const saveConvertToRecurring = async () => {
+    if (!convertingEntry || !convertForm) return;
+    const amount = parseFloat(convertForm.amount);
+    if (!convertForm.name.trim() || Number.isNaN(amount) || amount <= 0 || !convertForm.due_date) {
+      alert("Please enter a valid name, amount, and due date");
+      return;
+    }
+
+    setConvertSaving(true);
+    try {
+      const res = await authFetch("/api/commitments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: convertForm.name.trim(),
+          type: "bill",
+          amount,
+          due_date: convertForm.due_date,
+          recurrence_rule: convertForm.recurrence_rule,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to create recurring expense");
+        return;
+      }
+      setConvertingEntry(null);
+      setConvertForm(null);
+      refreshAll();
+    } catch {
+      alert("Failed to create recurring expense");
+    } finally {
+      setConvertSaving(false);
     }
   };
 
@@ -504,6 +567,15 @@ export default function LedgerStatement({
                           >
                             {isLoading ? "..." : "Delete"}
                           </button>
+                          {entry.type === "expense" && (
+                            <button
+                              onClick={() => startConvertToRecurring(entry)}
+                              disabled={isLoading}
+                              className="px-2.5 py-1 text-xs font-medium text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors"
+                            >
+                              Make Recurring
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -537,6 +609,67 @@ export default function LedgerStatement({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {convertingEntry && convertForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Convert Transaction to Recurring Expense</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Prefilled from transaction on {format(parseISO(convertingEntry.date), "MMM d, yyyy")}.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                value={convertForm.name}
+                onChange={(e) => setConvertForm({ ...convertForm, name: e.target.value })}
+                placeholder="Expense name"
+                className="sm:col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+              />
+              <input
+                type="number"
+                value={convertForm.amount}
+                onChange={(e) => setConvertForm({ ...convertForm, amount: e.target.value })}
+                step="0.01"
+                placeholder="Amount"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+              />
+              <input
+                type="date"
+                value={convertForm.due_date}
+                onChange={(e) => setConvertForm({ ...convertForm, due_date: e.target.value })}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+              />
+              <select
+                value={convertForm.recurrence_rule}
+                onChange={(e) => setConvertForm({ ...convertForm, recurrence_rule: e.target.value as RecurrenceRule })}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-500"
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={cancelConvert}
+                disabled={convertSaving}
+                className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveConvertToRecurring}
+                disabled={convertSaving}
+                className="px-4 py-2 text-sm font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
+              >
+                {convertSaving ? "Saving..." : "Create Recurring Expense"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

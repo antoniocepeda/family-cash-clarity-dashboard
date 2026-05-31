@@ -38,8 +38,12 @@ export default function Nav() {
       if (data.errors?.length) {
         setSyncError(`Synced with ${data.errors.length} item error${data.errors.length === 1 ? "" : "s"}.`);
       } else {
+        const refreshNote =
+          data.refresh_requested > 0
+            ? ` Refresh requested for ${data.refresh_requested} bank link${data.refresh_requested === 1 ? "" : "s"}; very recent posted transactions may appear after the next Plaid update.`
+            : "";
         setSyncMessage(
-          `Bank sync complete: ${data.accounts ?? 0} accounts, ${data.added ?? 0} new, ${data.modified ?? 0} updated, ${data.removed ?? 0} removed.`
+          `Bank sync complete: ${data.accounts ?? 0} accounts, ${data.added ?? 0} new, ${data.modified ?? 0} updated, ${data.removed ?? 0} removed.${refreshNote}`
         );
       }
     } catch (err) {

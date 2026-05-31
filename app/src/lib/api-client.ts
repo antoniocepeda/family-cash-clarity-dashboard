@@ -3,7 +3,12 @@
 export async function readJsonArray<T>(res: Response, label: string): Promise<T[]> {
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = body && typeof body === "object" && "error" in body ? String(body.error) : res.statusText;
+    const message =
+      body && typeof body === "object" && "detail" in body
+        ? String(body.detail)
+        : body && typeof body === "object" && "error" in body
+          ? String(body.error)
+          : res.statusText;
     throw new Error(`${label} failed: ${message}`);
   }
   if (!Array.isArray(body)) {
