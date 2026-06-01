@@ -102,7 +102,7 @@ function normalizeInstance(id: string, data: FirebaseFirestore.DocumentData): Co
     planned_amount: planned,
     actual_amount: data.actual_amount === undefined && data.actualAmount === undefined ? null : Number(data.actual_amount ?? data.actualAmount),
     allocated_amount: allocated,
-    remaining_amount: planned - allocated,
+    remaining_amount: Math.max(0, planned - allocated),
     status: (data.status ?? "open") as CommitmentInstance["status"],
     edited_from_template: Boolean(data.edited_from_template ?? data.editedFromTemplate ?? false),
     paid_date: (data.paid_date ?? data.paidDate ?? null) as string | null,
@@ -360,9 +360,20 @@ async function setInstanceAmounts(
   id: string,
   planned: number,
   allocated: number,
-  status?: CommitmentInstance["status"]
+  status?: CommitmentInstance["status"],
+  actualAmount?: number | null
 ) {
   const newStatus = status ?? (allocated >= planned - 0.005 ? "paid" : allocated > 0.005 ? "partially_funded" : "planned");
+  const remaining = Math.max(0, planned - allocated);
+  const actualFields =
+    actualAmount === undefined
+      ? {}
+      : {
+          actual_amount: actualAmount,
+          actualAmount,
+          paid_date: actualAmount === null ? null : format(new Date(), "yyyy-MM-dd"),
+          paidDate: actualAmount === null ? null : format(new Date(), "yyyy-MM-dd"),
+        };
   await collection(userId, COLLECTIONS.commitmentInstances).doc(id).set(
     {
       ...stampUpdate(),
@@ -370,9 +381,10 @@ async function setInstanceAmounts(
       plannedAmount: planned,
       allocated_amount: allocated,
       allocatedAmount: allocated,
-      remaining_amount: planned - allocated,
-      remainingAmount: planned - allocated,
+      remaining_amount: remaining,
+      remainingAmount: remaining,
       status: newStatus,
+      ...actualFields,
     },
     { merge: true }
   );
@@ -467,14 +479,19 @@ async function adjustAccountBalance(userId: string, accountId: string, delta: nu
   await syncAccountBalance(userId, accountId, account.current_balance + delta);
 }
 
-async function applyAllocations(userId: string, ledgerId: string, allocs: AllocationInput[]) {
+async function applyAllocations(
+  userId: string,
+  ledgerId: string,
+  allocs: AllocationInput[],
+  options: { allowOverage?: boolean; setActualOnPaid?: boolean } = {}
+) {
   for (const alloc of allocs) {
     const commitment = await getCommitment(userId, alloc.commitment_id);
     if (!commitment) throw new Error(`Commitment ${alloc.commitment_id} not found`);
     const id = await ensureInstance(userId, alloc.commitment_id, alloc.instance_due_date, commitment.amount);
     const inst = (await getInstance(userId, alloc.commitment_id, alloc.instance_due_date))!;
     const remaining = inst.planned_amount - inst.allocated_amount;
-    if (alloc.amount > remaining + 0.005) {
+    if (!options.allowOverage && alloc.amount > remaining + 0.005) {
       throw new Error(`Allocation of $${alloc.amount.toFixed(2)} exceeds remaining $${remaining.toFixed(2)} for commitment`);
     }
     const allocationId = randomUUID();
@@ -489,7 +506,16 @@ async function applyAllocations(userId: string, ledgerId: string, allocs: Alloca
       amount: alloc.amount,
       note: alloc.note || null,
     });
-    await setInstanceAmounts(userId, id, inst.planned_amount, inst.allocated_amount + alloc.amount);
+    const nextAllocated = inst.allocated_amount + alloc.amount;
+    const paid = nextAllocated >= inst.planned_amount - 0.005;
+    await setInstanceAmounts(
+      userId,
+      id,
+      inst.planned_amount,
+      nextAllocated,
+      undefined,
+      options.setActualOnPaid && paid ? nextAllocated : undefined
+    );
   }
 }
 
@@ -501,7 +527,8 @@ async function reverseAllocations(userId: string, ledgerId: string) {
     const instSnap = await instRef.get();
     if (instSnap.exists) {
       const inst = normalizeInstance(instSnap.id, instSnap.data()!);
-      await setInstanceAmounts(userId, inst.id, inst.planned_amount, Math.max(0, inst.allocated_amount - alloc.amount), "planned");
+      const nextAllocated = Math.max(0, inst.allocated_amount - alloc.amount);
+      await setInstanceAmounts(userId, inst.id, inst.planned_amount, nextAllocated, undefined, nextAllocated > 0.005 ? undefined : null);
     }
     await doc.ref.delete();
   }
@@ -597,6 +624,22 @@ export async function updateLedger(userId: string, id: string, input: Partial<Le
   );
   await adjustAccountBalance(userId, accountId, type === "income" ? amount : -amount);
   if (input.allocations) await applyAllocations(userId, id, input.allocations);
+  return true;
+}
+
+export async function updateLedgerAllocations(userId: string, id: string, allocations: AllocationInput[]) {
+  const existingSnap = await collection(userId, COLLECTIONS.ledger).doc(id).get();
+  if (!existingSnap.exists) return false;
+  const existing = normalizeLedger(existingSnap.id, existingSnap.data()!);
+  if (existing.type !== "expense") throw new Error("Only expense transactions can be linked to expenses");
+
+  const total = allocations.reduce((sum, alloc) => sum + alloc.amount, 0);
+  if (total > existing.amount + 0.005) {
+    throw new Error(`Linked total ($${total.toFixed(2)}) cannot exceed transaction amount ($${existing.amount.toFixed(2)})`);
+  }
+
+  await reverseAllocations(userId, id);
+  await applyAllocations(userId, id, allocations, { allowOverage: true, setActualOnPaid: true });
   return true;
 }
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { LedgerEntry, LedgerItem } from "@/lib/types";
+import { CommitmentInstance, LedgerEntry, LedgerItem } from "@/lib/types";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, isWithinInterval } from "date-fns";
 
 type DateFilter = "all" | "this_week" | "this_month" | "last_month" | "custom";
@@ -48,6 +48,12 @@ export default function LedgerStatement({
   const [convertingEntry, setConvertingEntry] = useState<LedgerEntry | null>(null);
   const [convertForm, setConvertForm] = useState<ConvertForm | null>(null);
   const [convertSaving, setConvertSaving] = useState(false);
+  const [linkingEntry, setLinkingEntry] = useState<LedgerEntry | null>(null);
+  const [eligibleInstances, setEligibleInstances] = useState<CommitmentInstance[]>([]);
+  const [loadingInstances, setLoadingInstances] = useState(false);
+  const [linkInstanceKey, setLinkInstanceKey] = useState("");
+  const [linkAmount, setLinkAmount] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
 
   const accountMap = useMemo<AccountMap>(() => {
     const map: AccountMap = {};
@@ -68,6 +74,32 @@ export default function LedgerStatement({
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries]);
+
+  useEffect(() => {
+    if (!linkingEntry) return;
+
+    setLoadingInstances(true);
+    authFetch("/api/commitment-instances")
+      .then((r) => r.json())
+      .then((data: CommitmentInstance[]) => {
+        const expenseInstances = data.filter((inst) => inst.commitment_type !== "income");
+        setEligibleInstances(expenseInstances);
+
+        const best = [...expenseInstances].sort((a, b) => {
+          const aDiff = Math.abs((a.remaining_amount || a.planned_amount) - linkingEntry.amount);
+          const bDiff = Math.abs((b.remaining_amount || b.planned_amount) - linkingEntry.amount);
+          if (aDiff !== bDiff) return aDiff - bDiff;
+          return a.due_date.localeCompare(b.due_date);
+        })[0];
+
+        if (best) {
+          setLinkInstanceKey(`${best.commitment_id}|${best.original_due_date || best.due_date}`);
+          setLinkAmount(linkingEntry.amount.toFixed(2));
+        }
+      })
+      .catch(() => setEligibleInstances([]))
+      .finally(() => setLoadingInstances(false));
+  }, [linkingEntry]);
 
   const refreshAll = useCallback(() => {
     fetchEntries();
@@ -193,6 +225,70 @@ export default function LedgerStatement({
     }
   };
 
+  const startLink = (entry: LedgerEntry) => {
+    setLinkingEntry(entry);
+    setEligibleInstances([]);
+    setLinkInstanceKey("");
+    setLinkAmount(entry.amount.toFixed(2));
+  };
+
+  const cancelLink = () => {
+    if (linkSaving) return;
+    setLinkingEntry(null);
+    setEligibleInstances([]);
+    setLinkInstanceKey("");
+    setLinkAmount("");
+  };
+
+  const selectedLinkInstance = useMemo(() => {
+    if (!linkInstanceKey) return null;
+    return eligibleInstances.find((inst) => `${inst.commitment_id}|${inst.original_due_date || inst.due_date}` === linkInstanceKey) ?? null;
+  }, [eligibleInstances, linkInstanceKey]);
+
+  const saveLink = async () => {
+    if (!linkingEntry || !selectedLinkInstance) return;
+    const amount = parseFloat(linkAmount);
+    if (Number.isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid linked amount");
+      return;
+    }
+    if (amount > linkingEntry.amount + 0.005) {
+      alert("Linked amount cannot exceed the transaction amount");
+      return;
+    }
+
+    setLinkSaving(true);
+    try {
+      const res = await authFetch(`/api/ledger/${linkingEntry.id}/allocations`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allocations: [
+            {
+              commitment_id: selectedLinkInstance.commitment_id,
+              instance_due_date: selectedLinkInstance.original_due_date || selectedLinkInstance.due_date,
+              amount,
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to link transaction");
+        return;
+      }
+      setLinkingEntry(null);
+      setEligibleInstances([]);
+      setLinkInstanceKey("");
+      setLinkAmount("");
+      refreshAll();
+    } catch {
+      alert("Failed to link transaction");
+    } finally {
+      setLinkSaving(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const today = new Date();
     let result = entries;
@@ -261,6 +357,12 @@ export default function LedgerStatement({
     () => entries.filter((e) => e.pending && !e.removed).length,
     [entries]
   );
+
+  const linkAmountNumber = parseFloat(linkAmount);
+  const linkDifference =
+    selectedLinkInstance && !Number.isNaN(linkAmountNumber)
+      ? linkAmountNumber - selectedLinkInstance.planned_amount
+      : 0;
 
   if (loading) {
     return (
@@ -553,6 +655,15 @@ export default function LedgerStatement({
                       </td>
                       <td className="px-5 py-3 text-right whitespace-nowrap">
                         <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {entry.type === "expense" && !entry.pending && (
+                            <button
+                              onClick={() => startLink(entry)}
+                              disabled={isLoading}
+                              className="px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+                            >
+                              Link
+                            </button>
+                          )}
                           <button
                             onClick={() => startEdit(entry)}
                             disabled={isLoading}
@@ -609,6 +720,113 @@ export default function LedgerStatement({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {linkingEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Link Transaction to Expense</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {linkingEntry.description} · ${linkingEntry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} on{" "}
+              {format(parseISO(linkingEntry.date), "MMM d, yyyy")}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Expense</label>
+                <select
+                  value={linkInstanceKey}
+                  onChange={(e) => {
+                    const nextKey = e.target.value;
+                    setLinkInstanceKey(nextKey);
+                    const next = eligibleInstances.find((inst) => `${inst.commitment_id}|${inst.original_due_date || inst.due_date}` === nextKey);
+                    if (next) setLinkAmount(linkingEntry.amount.toFixed(2));
+                  }}
+                  disabled={loadingInstances}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-slate-50"
+                >
+                  <option value="">{loadingInstances ? "Loading expenses..." : "Choose an open expense"}</option>
+                  {eligibleInstances.map((inst) => {
+                    const key = `${inst.commitment_id}|${inst.original_due_date || inst.due_date}`;
+                    return (
+                      <option key={key} value={key}>
+                        {inst.commitment_name} · {format(parseISO(inst.due_date), "MMM d")} · $
+                        {inst.remaining_amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} left
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Planned</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {selectedLinkInstance
+                      ? `$${selectedLinkInstance.planned_amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                      : "--"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Transaction</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    ${linkingEntry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Difference</p>
+                  <p className={`mt-1 text-sm font-semibold ${linkDifference > 0.005 ? "text-amber-700" : linkDifference < -0.005 ? "text-sky-700" : "text-slate-800"}`}>
+                    {selectedLinkInstance && !Number.isNaN(linkAmountNumber)
+                      ? `${linkDifference >= 0 ? "+" : "-"}$${Math.abs(linkDifference).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                      : "--"}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Amount to link</label>
+                <input
+                  type="number"
+                  value={linkAmount}
+                  onChange={(e) => setLinkAmount(e.target.value)}
+                  min="0"
+                  max={linkingEntry.amount}
+                  step="0.01"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                {selectedLinkInstance && linkDifference > 0.005 && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    This will set actual {selectedLinkInstance.commitment_name} to $
+                    {linkAmountNumber.toLocaleString("en-US", { minimumFractionDigits: 2 })}, $
+                    {linkDifference.toLocaleString("en-US", { minimumFractionDigits: 2 })} over plan.
+                  </p>
+                )}
+                {selectedLinkInstance && linkDifference < -0.005 && (
+                  <p className="mt-2 text-xs text-sky-700">
+                    This will partially fund {selectedLinkInstance.commitment_name}; $
+                    {Math.abs(linkDifference).toLocaleString("en-US", { minimumFractionDigits: 2 })} will remain expected.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={cancelLink}
+                disabled={linkSaving}
+                className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveLink}
+                disabled={linkSaving || !selectedLinkInstance || Number.isNaN(linkAmountNumber) || linkAmountNumber <= 0}
+                className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {linkSaving ? "Linking..." : "Link Expense"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {convertingEntry && convertForm && (
