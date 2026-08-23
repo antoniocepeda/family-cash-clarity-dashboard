@@ -1,6 +1,6 @@
 import { DecodedIdToken } from "firebase-admin/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { isAuthorizedEmail } from "@/lib/authorized-users";
+import { getAuthorizedEmails, isAuthorizedEmail } from "@/lib/authorized-users";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
 
 export type AuthedRequestContext = {
@@ -28,13 +28,24 @@ export async function verifyAuthToken(req: NextRequest): Promise<DecodedIdToken 
   }
 }
 
-function getPublicDataUser(): DecodedIdToken | null {
-  const uid = process.env.PUBLIC_DATA_OWNER_UID?.trim();
-  if (!uid) return null;
+async function getPublicDataUser(): Promise<DecodedIdToken | null> {
+  let uid = process.env.PUBLIC_DATA_OWNER_UID?.trim();
+  let email: string | undefined;
+
+  if (!uid || uid === "SET_TO_HOUSEHOLD_OWNER_FIREBASE_UID") {
+    email = getAuthorizedEmails()[0];
+    if (!email) return null;
+    try {
+      uid = (await getFirebaseAdminAuth().getUserByEmail(email)).uid;
+    } catch (err) {
+      console.error("Could not resolve public data owner from authorized email:", err);
+      return null;
+    }
+  }
 
   return {
     uid,
-    email: undefined,
+    email,
     email_verified: true,
     aud: process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "public-data",
     auth_time: Math.floor(Date.now() / 1000),
@@ -135,7 +146,7 @@ export function withPublicRead<Context extends object = object>(handler: AuthedH
   return (async function publicReadRoute(req: NextRequest, context: Context) {
     try {
       const authenticatedUser = await verifyAuthToken(req);
-      const user = authenticatedUser ?? getPublicDataUser();
+      const user = authenticatedUser ?? (await getPublicDataUser());
       if (!user) {
         return NextResponse.json({ error: "Public data is not configured" }, { status: 503 });
       }
