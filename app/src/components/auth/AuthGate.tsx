@@ -2,12 +2,13 @@
 
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { PUBLIC_PATHS } from "@/components/auth/AuthProvider";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
 
-  if (pathname === "/login") return <>{children}</>;
+  if (PUBLIC_PATHS.has(pathname)) return <>{children}</>;
 
   if (loading || !user) {
     return (

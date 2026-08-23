@@ -15,6 +15,9 @@ runConfig:
 # into the browser bundle at build time, so treat their secret entries as a
 # deployment value source, not as confidential once deployed.
 env:
+  # Firebase UID whose household data is shown to unauthenticated visitors.
+  - variable: PUBLIC_DATA_OWNER_UID
+    value: "SET_TO_HOUSEHOLD_OWNER_FIREBASE_UID"
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     secret: firebaseApiKey
     availability:

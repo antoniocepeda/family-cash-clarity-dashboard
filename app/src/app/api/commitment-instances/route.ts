@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth";
+import { withAuth, withPublicRead } from "@/lib/auth";
 import { getEligibleInstances } from "@/lib/instances";
 import { updateCommitmentInstance, updateInstancePlan } from "@/lib/repositories/firestore";
 import { CommitmentInstance } from "@/lib/types";
@@ -68,6 +68,6 @@ async function handleDELETE(req: NextRequest, { user }: { user: DecodedIdToken }
   }
 }
 
-export const GET = withAuth(handleGET);
+export const GET = withPublicRead(handleGET);
 export const PATCH = withAuth(handlePATCH);
 export const DELETE = withAuth(handleDELETE);

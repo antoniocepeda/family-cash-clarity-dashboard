@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth";
+import { withAuth, withPublicRead } from "@/lib/auth";
 import { createLedger, listLedger } from "@/lib/repositories/firestore";
 import { AllocationInput } from "@/lib/types";
 import type { DecodedIdToken } from "firebase-admin/auth";
@@ -35,5 +35,5 @@ async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) 
   }
 }
 
-export const GET = withAuth(handleGET);
+export const GET = withPublicRead(handleGET);
 export const POST = withAuth(handlePOST);

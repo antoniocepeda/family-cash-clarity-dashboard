@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth";
+import { withPublicRead } from "@/lib/auth";
 import { generateProjection } from "@/lib/projection";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
@@ -11,4 +11,4 @@ async function handleGET(req: NextRequest, { user }: { user: DecodedIdToken }) {
   return NextResponse.json(await generateProjection(user.uid, days, simulateEarlyIds, includePending));
 }
 
-export const GET = withAuth(handleGET);
+export const GET = withPublicRead(handleGET);

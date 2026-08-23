@@ -121,6 +121,7 @@ export default function Nav() {
             type="button"
             onClick={() => void handleCheckBank()}
             disabled={checking || syncing}
+            hidden={!user}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
           >
             {checking ? "Checking..." : "Check Bank"}
@@ -129,6 +130,7 @@ export default function Nav() {
             type="button"
             onClick={() => void handleSyncBank()}
             disabled={syncing || checking}
+            hidden={!user}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
           >
             {syncing ? "Syncing..." : "Sync Bank"}
@@ -138,13 +140,18 @@ export default function Nav() {
               {user.email}
             </span>
           )}
-          <button
+          {user ? <button
             type="button"
             onClick={() => void signOutUser()}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
           >
             Sign out
-          </button>
+          </button> : <Link
+            href={`/login?next=${encodeURIComponent(pathname)}`}
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            Sign in to edit
+          </Link>}
         </div>
       </div>
       {(syncMessage || syncError) && (

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@/lib/auth";
+import { withAuth, withPublicRead } from "@/lib/auth";
 import { createAccount, deleteAccount, ensureUser, listAccounts, updateAccount } from "@/lib/repositories/firestore";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
@@ -26,7 +26,7 @@ async function handleDELETE(req: NextRequest, { user }: { user: DecodedIdToken }
   return NextResponse.json({ success: true });
 }
 
-export const GET = withAuth(handleGET);
+export const GET = withPublicRead(handleGET);
 export const POST = withAuth(handlePOST);
 export const PUT = withAuth(handlePUT);
 export const DELETE = withAuth(handleDELETE);

@@ -8,9 +8,11 @@ import Nav from "@/components/Nav";
 import RunwayView from "@/components/RunwayView";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerItemInput, ProjectionDay } from "@/lib/types";
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
@@ -169,10 +171,10 @@ export default function Dashboard() {
           projection={projection}
           rangeDays={projectionDays === 14 || projectionDays === 30 || projectionDays === 60 ? projectionDays : 30}
           onRangeChange={handleProjectionDaysChange}
-          onUpdateInstance={handleUpdateInstance}
+          onUpdateInstance={user ? handleUpdateInstance : undefined}
         />
 
-        <div className="border-t border-slate-200 pt-6">
+        {user && <div className="border-t border-slate-200 pt-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
           <QuickActions
             accounts={accounts}
@@ -181,7 +183,7 @@ export default function Dashboard() {
             onAddAccount={handleAddAccount}
             onLogTransaction={handleLogTransaction}
           />
-        </div>
+        </div>}
       </main>
     </>
   );

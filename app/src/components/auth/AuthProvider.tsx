@@ -14,13 +14,13 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const PUBLIC_PATHS = new Set(["/login"]);
+export const PUBLIC_PATHS = new Set(["/", "/expenses", "/trends", "/transactions", "/login"]);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(isFirebaseClientConfigured());
+  const [loading, setLoading] = useState(() => isFirebaseClientConfigured());
 
   useEffect(() => {
     if (!isFirebaseClientConfigured()) {

@@ -84,7 +84,13 @@ NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
 NEXT_PUBLIC_FIREBASE_PROJECT_ID
 NEXT_PUBLIC_FIREBASE_APP_ID
 NEXT_PUBLIC_AUTHORIZED_EMAILS
+PUBLIC_DATA_OWNER_UID
 ```
+
+`PUBLIC_DATA_OWNER_UID` is the Firebase Auth UID for the household owner whose
+read-only dashboard data should be shown to visitors. Visitors can view the
+dashboard and read-only pages without signing in; all writes still require an
+authorized Firebase user. Set this value in App Hosting before going live.
 
 Required runtime-only Plaid secrets:
 

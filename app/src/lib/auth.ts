@@ -13,6 +13,8 @@ type AuthedHandler<Context extends object> = (
   context: Context & { user: DecodedIdToken }
 ) => Promise<Response> | Response;
 
+type NextRouteHandler = (req: NextRequest, context?: unknown) => Promise<Response>;
+
 export async function verifyAuthToken(req: NextRequest): Promise<DecodedIdToken | null> {
   const header = req.headers.get("authorization");
   const match = header?.match(/^Bearer (.+)$/i);
@@ -24,6 +26,24 @@ export async function verifyAuthToken(req: NextRequest): Promise<DecodedIdToken 
     console.error("Firebase token verification failed:", err);
     return decodeLocalDevelopmentToken(match[1]) ?? getLocalDevelopmentUser();
   }
+}
+
+function getPublicDataUser(): DecodedIdToken | null {
+  const uid = process.env.PUBLIC_DATA_OWNER_UID?.trim();
+  if (!uid) return null;
+
+  return {
+    uid,
+    email: undefined,
+    email_verified: true,
+    aud: process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "public-data",
+    auth_time: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    firebase: { sign_in_provider: "public-read" },
+    iat: Math.floor(Date.now() / 1000),
+    iss: "public-read",
+    sub: uid,
+  } as DecodedIdToken;
 }
 
 function decodeLocalDevelopmentToken(token: string): DecodedIdToken | null {
@@ -80,7 +100,7 @@ function getLocalDevelopmentUser(): DecodedIdToken | null {
 }
 
 export function withAuth<Context extends object = object>(handler: AuthedHandler<Context>) {
-  return async function authedRoute(req: NextRequest, context?: Context) {
+  return (async function authedRoute(req: NextRequest, context?: Context) {
     try {
       const user = await verifyAuthToken(req);
       if (!user) {
@@ -107,5 +127,30 @@ export function withAuth<Context extends object = object>(handler: AuthedHandler
         { status: 500 }
       );
     }
-  };
+  }) as unknown as NextRouteHandler;
+}
+
+/** Allows unauthenticated GETs to read the explicitly configured public dataset. */
+export function withPublicRead<Context extends object = object>(handler: AuthedHandler<Context>) {
+  return (async function publicReadRoute(req: NextRequest, context: Context) {
+    try {
+      const authenticatedUser = await verifyAuthToken(req);
+      const user = authenticatedUser ?? getPublicDataUser();
+      if (!user) {
+        return NextResponse.json({ error: "Public data is not configured" }, { status: 503 });
+      }
+      if (authenticatedUser && !isAuthorizedEmail(authenticatedUser.email)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return await handler(req, { ...context, user });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("Public read API route failed:", {
+        method: req.method,
+        path: new URL(req.url).pathname,
+        error: errorMessage,
+      });
+      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+  }) as unknown as NextRouteHandler;
 }

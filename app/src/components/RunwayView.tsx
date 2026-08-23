@@ -214,7 +214,8 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
                         <button
                           key={`${day.date}-income-${idx}`}
                           type="button"
-                          onClick={() => startEdit(item)}
+                          onClick={() => onUpdateInstance && startEdit(item)}
+                          disabled={!onUpdateInstance}
                           className="flex w-full items-center justify-between gap-3 rounded-lg bg-white/75 px-3 py-2 text-left transition-colors hover:bg-white"
                         >
                           <span className="min-w-0 truncate text-sm font-medium text-slate-800">{item.name}</span>
@@ -233,7 +234,8 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
                         <button
                           key={`${day.date}-bill-${idx}`}
                           type="button"
-                          onClick={() => startEdit(item)}
+                          onClick={() => onUpdateInstance && startEdit(item)}
+                          disabled={!onUpdateInstance}
                           className="flex w-full items-center justify-between gap-3 rounded-lg bg-white/75 px-3 py-2 text-left transition-colors hover:bg-white"
                         >
                           <span className="min-w-0 truncate text-sm font-medium text-slate-800">{item.name}</span>
