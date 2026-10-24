@@ -7,4 +7,4 @@ async function handleGET(_req: NextRequest, { user }: { user: DecodedIdToken }) 
   return NextResponse.json(await generateAlerts(user.uid));
 }
 
-export const GET = withAuth(handleGET);
+export const GET = withAuth(handleGET, { allowAgent: true });

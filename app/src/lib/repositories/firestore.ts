@@ -30,6 +30,9 @@ export const COLLECTIONS = {
   plaidSync: "plaidSync",
 } as const;
 
+/** Agent write trail. Kept outside COLLECTIONS so reset/seed do not erase it. */
+export const AGENT_AUDIT_COLLECTION = "agentAudit";
+
 export function userRef(userId: string) {
   return getFirebaseAdminFirestore().collection("users").doc(userId);
 }
@@ -165,9 +168,14 @@ function normalizePlaidAccount(id: string, data: FirebaseFirestore.DocumentData)
   };
 }
 
-export async function ensureUser(userId: string, email?: string) {
+export async function ensureUser(userId: string, email?: string | null) {
   await userRef(userId).set(
-    { uid: userId, email: email ?? null, updatedAt: new Date().toISOString(), createdAt: FieldValue.serverTimestamp() },
+    {
+      uid: userId,
+      ...(email ? { email } : {}),
+      updatedAt: new Date().toISOString(),
+      createdAt: FieldValue.serverTimestamp(),
+    },
     { merge: true }
   );
 }
@@ -882,6 +890,42 @@ export async function resetUserData(userId: string) {
     const snap = await collection(userId, name).get();
     await Promise.all(snap.docs.map((d) => d.ref.delete()));
   }
+}
+
+export async function recordAgentAudit(
+  userId: string,
+  entry: { method: string; route: string; summary: string; status: number }
+) {
+  const id = randomUUID();
+  const timestamp = new Date().toISOString();
+  await userRef(userId).collection(AGENT_AUDIT_COLLECTION).doc(id).set({
+    ...stampCreate(userId),
+    method: entry.method,
+    route: entry.route,
+    summary: entry.summary.slice(0, 500),
+    status: entry.status,
+    timestamp,
+  });
+}
+
+export async function listAgentAudit(userId: string, limit: number) {
+  const snap = await userRef(userId)
+    .collection(AGENT_AUDIT_COLLECTION)
+    .orderBy("timestamp", "desc")
+    .limit(limit)
+    .get();
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      method: String(data.method ?? ""),
+      route: String(data.route ?? ""),
+      summary: String(data.summary ?? ""),
+      status: Number(data.status ?? 0),
+      timestamp: String(data.timestamp ?? ""),
+    };
+  });
 }
 
 export async function listRecurringCommitmentsForTrends(userId: string, commitmentId?: string) {

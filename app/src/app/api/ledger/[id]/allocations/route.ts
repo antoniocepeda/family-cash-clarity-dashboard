@@ -37,4 +37,4 @@ async function handlePATCH(
   }
 }
 
-export const PATCH = withAuth<{ params: Promise<{ id: string }> }>(handlePATCH);
+export const PATCH = withAuth<{ params: Promise<{ id: string }> }>(handlePATCH, { allowAgent: true });

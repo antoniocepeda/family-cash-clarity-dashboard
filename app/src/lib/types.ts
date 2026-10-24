@@ -166,3 +166,12 @@ export interface Alert {
   message: string;
   action_text: string;
 }
+
+export interface AgentAuditEntry {
+  id: string;
+  method: string;
+  route: string;
+  summary: string;
+  status: number;
+  timestamp: string;
+}

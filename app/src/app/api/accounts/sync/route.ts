@@ -10,4 +10,4 @@ async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) 
   return NextResponse.json(await syncAccountBalance(user.uid, id, Number(actual_balance)));
 }
 
-export const POST = withAuth(handlePOST);
+export const POST = withAuth(handlePOST, { allowAgent: true });
