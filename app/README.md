@@ -294,4 +294,4 @@ KB.md              User guide and product knowledge base
 
 - The dashboard requires Firebase Authentication; server routes also check the authorized user email list. Anonymous reads stay off unless `ALLOW_PUBLIC_READ=true`.
 - Projection and alert accuracy depends on keeping account balances reconciled and commitments up to date.
-- The app uses system fonts so builds do not depend on downloading Google-hosted fonts.
+- The app uses Geist via next/font, with the system font stack as a fallback.

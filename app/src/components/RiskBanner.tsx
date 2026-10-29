@@ -8,27 +8,27 @@ interface Props {
 
 const severityConfig = {
   critical: {
-    bg: "bg-red-50 border-red-200",
-    icon: "bg-red-500",
-    text: "text-red-800",
-    action: "text-red-600 hover:text-red-800",
-    dot: "bg-red-500",
+    bg: "bg-[var(--negative-soft)] border-[color-mix(in_srgb,var(--negative)_35%,transparent)]",
+    icon: "bg-[var(--negative)]",
+    text: "text-[var(--negative)]",
+    action: "text-[var(--negative)] hover:text-[var(--negative)]",
+    dot: "bg-[var(--negative)]",
     label: "Critical",
   },
   warning: {
-    bg: "bg-amber-50 border-amber-200",
-    icon: "bg-amber-500",
-    text: "text-amber-800",
-    action: "text-amber-600 hover:text-amber-800",
-    dot: "bg-amber-500",
+    bg: "bg-[var(--warning-soft)] border-[color-mix(in_srgb,var(--warning)_35%,transparent)]",
+    icon: "bg-[var(--warning)]",
+    text: "text-[var(--warning)]",
+    action: "text-[var(--warning)] hover:text-[var(--warning)]",
+    dot: "bg-[var(--warning)]",
     label: "Warning",
   },
   info: {
-    bg: "bg-slate-50 border-slate-200",
-    icon: "bg-slate-400",
-    text: "text-slate-700",
-    action: "text-slate-500 hover:text-slate-700",
-    dot: "bg-slate-400",
+    bg: "bg-[var(--surface-2)] border-[var(--line)]",
+    icon: "bg-[var(--faint)]",
+    text: "text-[var(--text-secondary)]",
+    action: "text-[var(--muted)] hover:text-[var(--text)]",
+    dot: "bg-[var(--faint)]",
     label: "Info",
   },
 };
@@ -36,11 +36,11 @@ const severityConfig = {
 export default function RiskBanner({ alerts }: Props) {
   if (alerts.length === 0) {
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white text-sm font-bold">
+      <div className="rounded-2xl border border-[color-mix(in_srgb,var(--positive)_35%,transparent)] bg-[var(--positive-soft)] p-4 flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--positive)] text-[var(--ink)] text-sm font-bold">
           ✓
         </div>
-        <p className="text-sm font-medium text-emerald-800">
+        <p className="text-sm font-medium text-[var(--positive)]">
           All clear — no risks detected in the next 14 days.
         </p>
       </div>

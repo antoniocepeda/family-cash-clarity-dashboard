@@ -14,8 +14,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
-          <p className="mt-4 text-sm text-slate-500 font-medium">Checking authentication...</p>
+          <div className="spinner" role="status" aria-label="Loading" />
+          <p className="mt-4 text-sm text-[var(--muted)]">Checking authentication...</p>
         </div>
       </div>
     );

@@ -38,14 +38,14 @@ export default function NextBills({ commitments }: Props) {
   const totalIncome = income.reduce((sum, c) => sum + getRemaining(c), 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm h-full flex flex-col">
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Next 7 Days</h2>
+        <h2 className="text-lg font-semibold text-[var(--text)]">Next 7 Days</h2>
         <div className="flex items-center gap-4 text-sm">
-          <span className="text-rose-600 font-semibold">
+          <span className="text-[var(--negative)] font-semibold">
             −${totalBillsDue.toLocaleString("en-US", { minimumFractionDigits: 2 })} out
           </span>
-          <span className="text-emerald-600 font-semibold">
+          <span className="text-[var(--positive)] font-semibold">
             +${totalIncome.toLocaleString("en-US", { minimumFractionDigits: 2 })} in
           </span>
         </div>
@@ -60,26 +60,26 @@ export default function NextBills({ commitments }: Props) {
             return (
               <div
                 key={item.id}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-[var(--surface-3)] transition-colors"
               >
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-lg text-white text-xs font-bold ${
                     item.type === "income"
-                      ? "bg-emerald-500"
-                      : "bg-rose-500"
+                      ? "bg-[var(--positive)]"
+                      : "bg-[var(--negative)]"
                   }`}
                 >
                   {daysUntil <= 0 ? "!" : `${daysUntil}d`}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">{item.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-sm font-medium text-[var(--text)] truncate">{item.name}</p>
+                  <p className="text-xs text-[var(--muted)]">
                     {format(parseISO(item.due_date), "EEE, MMM d")}
                   </p>
                 </div>
                 <span
                   className={`text-sm font-semibold tabular-nums ${
-                    item.type === "income" ? "text-emerald-600" : "text-slate-800"
+                    item.type === "income" ? "text-[var(--positive)]" : "text-[var(--text)]"
                   }`}
                 >
                   {item.type === "income" ? "+" : "−"}$
@@ -90,7 +90,7 @@ export default function NextBills({ commitments }: Props) {
           })}
 
         {bills.length === 0 && income.length === 0 && (
-          <p className="text-center text-sm text-slate-400 py-4">
+          <p className="text-center text-sm text-[var(--muted)] py-4">
             No expenses in the next 7 days
           </p>
         )}

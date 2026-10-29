@@ -37,28 +37,28 @@ export default function AgentActivity() {
   }, []);
 
   return (
-    <section className="border-t border-slate-200 pt-6">
-      <h2 className="text-lg font-semibold text-slate-800 mb-1">Recent agent changes</h2>
-      <p className="text-sm text-slate-500 mb-4">
+    <section className="border-t border-[var(--line)] pt-6">
+      <h2 className="eyebrow mb-1">Agent</h2>
+      <p className="mb-4 text-sm text-[var(--muted)]">
         Writes made with the assistant API key. Browser edits are not listed here.
       </p>
-      {unavailable && <p className="text-sm text-slate-500">Agent activity is unavailable.</p>}
-      {!unavailable && entries === null && <p className="text-sm text-slate-500">Loading agent activity...</p>}
-      {entries && entries.length === 0 && <p className="text-sm text-slate-500">No agent changes yet.</p>}
+      {unavailable && <p className="text-sm text-[var(--muted)]">Agent activity is unavailable.</p>}
+      {!unavailable && entries === null && <p className="text-sm text-[var(--muted)]">Loading agent activity...</p>}
+      {entries && entries.length === 0 && <p className="text-sm text-[var(--muted)]">No agent changes yet.</p>}
       {entries && entries.length > 0 && (
-        <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+        <ul className="divide-y divide-[var(--line)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
           {entries.map((entry) => (
             <li key={entry.id} className="px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-sm font-medium text-slate-800">
+                <p className="text-sm font-medium text-[var(--text)]">
                   {entry.method} {entry.route}
-                  <span className="ml-2 text-xs font-normal text-slate-400">{entry.status}</span>
+                  <span className="ml-2 text-xs font-normal text-[var(--faint)]">{entry.status}</span>
                 </p>
-                <time className="text-xs text-slate-400" dateTime={entry.timestamp}>
+                <time className="text-xs text-[var(--faint)]" dateTime={entry.timestamp}>
                   {formatWhen(entry.timestamp)}
                 </time>
               </div>
-              <p className="mt-1 text-xs text-slate-500 break-words line-clamp-2">{entry.summary}</p>
+              <p className="mt-1 break-words text-xs text-[var(--muted)] line-clamp-2">{entry.summary}</p>
             </li>
           ))}
         </ul>

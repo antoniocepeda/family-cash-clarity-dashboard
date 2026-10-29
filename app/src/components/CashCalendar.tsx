@@ -80,14 +80,14 @@ function getRiskState(day: ProjectionDay | undefined, bufferAmount = 500): RiskS
 }
 
 function dayClasses(risk: RiskState, inMonth: boolean, selected: boolean) {
-  const base = selected ? "ring-2 ring-sky-500" : "";
+  const base = selected ? "ring-2 ring-[var(--accent)]" : "";
   const dim = inMonth ? "" : "opacity-45";
   const colors = {
-    safe: "border-emerald-100 bg-emerald-50/45",
-    tight: "border-yellow-200 bg-yellow-50",
-    "below buffer": "border-amber-300 bg-amber-50",
-    negative: "border-red-300 bg-red-50",
-    overdue: "border-fuchsia-300 bg-fuchsia-50",
+    safe: "border-[var(--line)] bg-[var(--surface)]",
+    tight: "border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[var(--warning-soft)]",
+    "below buffer": "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)]",
+    negative: "border-[color-mix(in_srgb,var(--negative)_45%,transparent)] bg-[var(--negative-soft)]",
+    overdue: "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)]",
   };
   return `${base} ${dim} ${colors[risk]}`;
 }
@@ -95,15 +95,15 @@ function dayClasses(risk: RiskState, inMonth: boolean, selected: boolean) {
 function riskLabelClasses(risk: RiskState) {
   switch (risk) {
     case "negative":
-      return "bg-red-100 text-red-700";
+      return "bg-[var(--negative-soft)] text-[var(--negative)]";
     case "overdue":
-      return "bg-fuchsia-100 text-fuchsia-700";
+      return "bg-[var(--warning-soft)] text-[var(--warning)]";
     case "below buffer":
-      return "bg-amber-100 text-amber-800";
+      return "bg-[var(--warning-soft)] text-[var(--warning)]";
     case "tight":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-[var(--warning-soft)] text-[var(--warning)]";
     default:
-      return "bg-emerald-100 text-emerald-700";
+      return "bg-[var(--positive-soft)] text-[var(--positive)]";
   }
 }
 
@@ -237,46 +237,57 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
   };
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 xl:p-5">
+    <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3 shadow-sm sm:p-4 xl:p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cash Calendar</h1>
-          <p className="mt-1 text-sm text-slate-500">Click any date to add an expense or deposit. Drag items to move due dates.</p>
+          <p className="eyebrow">Calendar</p>
+          <h1 className="mt-1 text-3xl font-medium text-[var(--text)]">Cash</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">Select a date to review it. Add an expense or deposit, or drag items on a larger screen to move due dates.</p>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+        <div className="scroll-row text-xs font-semibold">
           {(["safe", "tight", "below buffer", "negative", "overdue"] as RiskState[]).map((risk) => (
             <span key={risk} className={`rounded-full px-2 py-1 capitalize ${riskLabelClasses(risk)}`}>{risk}</span>
           ))}
         </div>
       </div>
 
-      <div className="mb-4 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 sm:px-4">
+      <div className="mb-3 flex items-center gap-2">
         <button
           type="button"
           onClick={() => setMonth(addMonths(month, -1))}
           aria-label="Previous month"
-          className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          className="grid h-11 w-11 place-items-center rounded-full border border-[var(--line)] text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
         >
           <span aria-hidden="true">&lt;</span>
         </button>
-        <h2 className="text-lg font-semibold tracking-wide text-slate-900">{format(month, "MMMM yyyy")}</h2>
+        <h2 className="flex-1 text-center text-base font-medium tracking-tight text-[var(--text)]">{format(month, "MMMM yyyy")}</h2>
         <button
           type="button"
           onClick={() => setMonth(addMonths(month, 1))}
           aria-label="Next month"
-          className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          className="grid h-11 w-11 place-items-center rounded-full border border-[var(--line)] text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
         >
           <span aria-hidden="true">&gt;</span>
         </button>
       </div>
+      <button
+        type="button"
+        onClick={() => setShowAddModal(true)}
+        className="btn btn-primary mb-4 w-full sm:w-auto"
+      >
+        Add on {format(selectedDate, "MMM d")}
+      </button>
 
-      <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+      <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-          <span key={day} className="py-2">{day}</span>
+          <span key={day} className="py-2">
+            <span className="sm:hidden">{day.slice(0, 1)}</span>
+            <span className="hidden sm:inline">{day}</span>
+          </span>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {calendarDays.map((day) => {
           const dateKey = format(day, "yyyy-MM-dd");
           const dayProjection = projectionByDate.get(dateKey);
@@ -291,7 +302,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
               key={dateKey}
               onClick={() => {
                 setSelectedDate(day);
-                openAddModal(day);
+                if (window.matchMedia("(min-width: 640px)").matches) openAddModal(day);
               }}
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
@@ -301,18 +312,29 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                 void moveItem(JSON.parse(payload) as EditableItem, dateKey).finally(() => setDraggingKey(null));
               }}
               aria-pressed={selected}
-              className={`min-h-[180px] rounded-xl border p-2 text-left transition-colors hover:border-sky-300 sm:min-h-[170px] lg:min-h-[160px] xl:min-h-[185px] ${dayClasses(risk, isSameMonth(day, month), selected)}`}
+              className={`min-h-16 rounded-lg border p-1 text-left transition-colors hover:border-[var(--line-strong)] sm:min-h-40 sm:rounded-xl sm:p-2 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-base font-bold text-slate-900">{format(day, "d")}</span>
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold capitalize ${riskLabelClasses(risk)}`}>
-                  {risk === "below buffer" ? "buffer" : risk}
-                </span>
+              <div className="flex items-start justify-between gap-1">
+                <span className="text-xs font-medium text-[var(--text)] sm:text-base">{format(day, "d")}</span>
+                {dayProjection && (
+                  <>
+                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full sm:hidden ${risk === "negative" ? "bg-[var(--negative)]" : risk === "safe" ? "bg-[var(--positive)]" : "bg-[var(--warning)]"}`} />
+                    <span className={`hidden rounded-full px-1.5 py-0.5 text-[10px] font-semibold capitalize sm:inline ${riskLabelClasses(risk)}`}>
+                      {risk === "below buffer" ? "buffer" : risk}
+                    </span>
+                  </>
+                )}
               </div>
-              <div className={`mt-1 text-xs font-semibold ${dayProjection && dayProjection.balance < 0 ? "text-red-700" : "text-slate-600"}`}>
-                End: {dayProjection ? money(dayProjection.balance) : "-"}
-              </div>
-              <div className="mt-2 space-y-1">
+              {dayProjection && (
+                <div className={`mt-1 truncate text-[10px] font-medium tabular-nums sm:text-xs ${dayProjection.balance < 0 ? "text-[var(--negative)]" : "text-[var(--muted)]"}`}>
+                  <span className="hidden sm:inline">End </span>
+                  {money(dayProjection.balance)}
+                </div>
+              )}
+              {items.length > 0 && (
+                <p className="mt-1 text-[10px] tabular-nums text-[var(--faint)] sm:hidden">{items.length}</p>
+              )}
+              <div className="mt-2 hidden space-y-1 sm:block">
                 {visibleItems.map((item, index) => {
                   const itemKey = `${item.commitment_id}-${item.original_due_date}-${index}`;
                   const isIncome = item.type === "income";
@@ -340,17 +362,17 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                       onDragEnd={() => setDraggingKey(null)}
                       className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing ${
                         isIncome
-                          ? "border-emerald-200 bg-white text-emerald-700"
-                          : "border-rose-200 bg-white text-rose-700"
+                          ? "border-[color-mix(in_srgb,var(--positive)_35%,transparent)] bg-[var(--surface)] text-[var(--positive)]"
+                          : "border-[color-mix(in_srgb,var(--negative)_35%,transparent)] bg-[var(--surface)] text-[var(--negative)]"
                       } ${draggingKey === itemKey ? "opacity-50" : ""}`}
                     >
-                      <span className="block truncate text-slate-800">{item.name}</span>
+                      <span className="block truncate text-[var(--text)]">{item.name}</span>
                       <span className="tabular-nums">{isIncome ? "+" : "-"}{money(item.amount, item.amount % 1 !== 0)}</span>
                     </span>
                   );
                 })}
                 {items.length > visibleItems.length && (
-                  <span className="block rounded bg-white/70 px-1.5 py-1 text-[11px] font-semibold text-slate-600">
+                  <span className="block rounded bg-[var(--surface-2)] px-1.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                     +{items.length - visibleItems.length} more
                   </span>
                 )}
@@ -361,9 +383,9 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-end bg-slate-900/50 p-0 sm:items-center sm:justify-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end bg-black/75 p-0 sm:items-center sm:justify-center sm:p-4">
           <form
-            className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-xl sm:rounded-2xl"
+            className="w-full rounded-t-2xl bg-[var(--surface)] p-5 shadow-xl sm:max-w-xl sm:rounded-2xl"
             onSubmit={(event) => {
               event.preventDefault();
               void saveEvent();
@@ -371,17 +393,17 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Add cash event</h2>
-                <p className="mt-1 text-sm text-slate-500">{format(selectedDate, "EEEE, MMM d")}</p>
+                <h2 className="text-lg font-bold text-[var(--text)]">Add cash event</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">{format(selectedDate, "EEEE, MMM d")}</p>
               </div>
-              <button type="button" onClick={closeAddModal} className="rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100">
+              <button type="button" onClick={closeAddModal} className="rounded-lg px-2 py-1 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--surface-3)]">
                 Close
               </button>
             </div>
 
             <div className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-1 rounded-md bg-slate-100 p-1">
-                <button type="button" onClick={() => setType("bill")} className={`rounded px-3 py-2 text-sm font-medium ${type === "bill" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+              <div className="grid grid-cols-2 gap-1 rounded-md bg-[var(--surface-2)] p-1">
+                <button type="button" onClick={() => setType("bill")} className={`rounded px-3 py-2 text-sm font-medium ${type === "bill" ? "bg-[var(--surface)] text-[var(--text)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}>
                   Expense
                 </button>
                 <button
@@ -390,30 +412,30 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                     setType("income");
                     setRecurrence("");
                   }}
-                  className={`rounded px-3 py-2 text-sm font-medium ${type === "income" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  className={`rounded px-3 py-2 text-sm font-medium ${type === "income" ? "bg-[var(--surface)] text-[var(--text)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--text)]"}`}
                 >
                   Deposit
                 </button>
               </div>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-slate-600">{type === "income" ? "Deposit source" : "Expense name"}</span>
-                <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500" />
+                <span className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">{type === "income" ? "Deposit source" : "Expense name"}</span>
+                <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-md border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]" />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Amount</span>
-                  <input type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500" />
+                  <span className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Amount</span>
+                  <input type="number" min="0" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="w-full rounded-md border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]" />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Repeats</span>
-                  <select value={recurrence} onChange={(event) => setRecurrence(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500">
+                  <span className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Repeats</span>
+                  <select value={recurrence} onChange={(event) => setRecurrence(event.target.value)} className="w-full rounded-md border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]">
                     {recurrenceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
               </div>
             </div>
 
-            <button disabled={!name.trim() || !amount || saving} className="mt-4 w-full rounded-md bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50">
+            <button disabled={!name.trim() || !amount || saving} className="mt-4 w-full rounded-md bg-[var(--text)] px-4 py-2.5 text-sm font-semibold text-[var(--ink)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
               {saving ? "Saving..." : `Add ${recurrence ? "recurring " : ""}${type === "income" ? "deposit" : "expense"}`}
             </button>
           </form>
@@ -421,40 +443,40 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-end bg-slate-900/40 p-0 sm:items-center sm:justify-center sm:p-4">
-          <form onSubmit={saveEdit} className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-2xl">
+        <div className="fixed inset-0 z-50 flex items-end bg-black/70 p-0 sm:items-center sm:justify-center sm:p-4">
+          <form onSubmit={saveEdit} className="w-full rounded-t-2xl bg-[var(--surface)] p-5 shadow-xl sm:max-w-lg sm:rounded-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Edit calendar item</h2>
-                <p className="mt-1 text-sm text-slate-500">Changes default to this occurrence only.</p>
+                <h2 className="text-lg font-bold text-[var(--text)]">Edit calendar item</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">Changes default to this occurrence only.</p>
               </div>
-              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100">
+              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-2 py-1 text-sm font-semibold text-[var(--muted)] hover:bg-[var(--surface-3)]">
                 Close
               </button>
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="block sm:col-span-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
-                <input value={editName} onChange={(event) => setEditName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Name</span>
+                <input value={editName} onChange={(event) => setEditName(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--accent)]" />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amount</span>
-                <input type="number" min="0" step="0.01" value={editAmount} onChange={(event) => setEditAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Amount</span>
+                <input type="number" min="0" step="0.01" value={editAmount} onChange={(event) => setEditAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--accent)]" />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</span>
-                <input type="date" value={editDate} onChange={(event) => setEditDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Due date</span>
+                <input type="date" value={editDate} onChange={(event) => setEditDate(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--accent)]" />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
-                <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as CommitmentInstance["status"])} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Status</span>
+                <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as CommitmentInstance["status"])} className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--accent)]">
                   {statuses.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Apply to</span>
-                <select value={editScope} onChange={(event) => setEditScope(event.target.value as "instance" | "future" | "template")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-sky-500">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Apply to</span>
+                <select value={editScope} onChange={(event) => setEditScope(event.target.value as "instance" | "future" | "template")} className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[var(--accent)]">
                   <option value="instance">This occurrence only</option>
                   <option value="future">This and future occurrences</option>
                   <option value="template">Recurring template</option>
@@ -463,13 +485,13 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
             </div>
 
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={deleteEditing} disabled={saving} className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 sm:mr-auto">
+              <button type="button" onClick={deleteEditing} disabled={saving} className="rounded-lg border border-[color-mix(in_srgb,var(--negative)_35%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--negative)] hover:bg-[var(--negative-soft)] disabled:opacity-50 sm:mr-auto">
                 Delete occurrence
               </button>
-              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-3)]">
                 Cancel
               </button>
-              <button disabled={saving} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+              <button disabled={saving} className="rounded-lg bg-[var(--text)] px-4 py-2 text-sm font-semibold text-[var(--ink)] hover:opacity-90 disabled:opacity-50">
                 {saving ? "Saving..." : "Save changes"}
               </button>
             </div>
@@ -478,21 +500,21 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
       )}
 
       {selectedDay && selectedDay.commitments.length > 0 && (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <h3 className="text-sm font-semibold text-slate-700">{format(selectedDate, "EEE, MMM d")} items</h3>
+        <div className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+          <h3 className="text-sm font-semibold text-[var(--text-secondary)]">{format(selectedDate, "EEE, MMM d")} items</h3>
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {selectedDay.commitments.map((item, index) => (
               <button
                 key={`${item.commitment_id}-${item.original_due_date}-${index}`}
                 type="button"
                 onClick={() => startEdit(item)}
-                className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-left hover:border-sky-300 hover:bg-sky-50"
+                className="flex items-center justify-between gap-3 rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-left hover:border-[var(--line-strong)] hover:bg-[var(--accent-soft)]"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-slate-900">{item.name}</span>
-                  <span className="text-xs capitalize text-slate-500">{item.status ?? "planned"}</span>
+                  <span className="block truncate text-sm font-semibold text-[var(--text)]">{item.name}</span>
+                  <span className="text-xs capitalize text-[var(--muted)]">{item.status ?? "planned"}</span>
                 </span>
-                <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-emerald-700" : "text-rose-700"}`}>
+                <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>
                   {item.type === "income" ? "+" : "-"}{money(item.amount, true)}
                 </span>
               </button>

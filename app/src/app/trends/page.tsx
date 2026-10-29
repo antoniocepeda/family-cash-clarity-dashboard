@@ -7,7 +7,7 @@ export default function TrendsPage() {
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1">
+      <main className="page-shell">
         <SpendingTrends />
       </main>
     </>
