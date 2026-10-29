@@ -14,7 +14,9 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export const PUBLIC_PATHS = new Set(["/", "/expenses", "/trends", "/transactions", "/login"]);
+// Only the login screen is public. Household pages require a Firebase session
+// and must not load data through unauthenticated public read.
+export const PUBLIC_PATHS = new Set(["/login"]);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -50,7 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const isPublicPath = PUBLIC_PATHS.has(pathname);
     if (!user && !isPublicPath) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      const next = encodeURIComponent(pathname);
+      const error = isFirebaseClientConfigured() ? "" : "&error=missing-config";
+      router.replace(`/login?next=${next}${error}`);
     } else if (user && pathname === "/login") {
       router.replace("/");
     }

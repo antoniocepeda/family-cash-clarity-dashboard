@@ -15,4 +15,4 @@ async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) 
   }
 }
 
-export const POST = withAuth(handlePOST);
+export const POST = withAuth(handlePOST, { allowAgent: true });

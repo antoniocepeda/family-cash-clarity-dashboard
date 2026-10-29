@@ -48,5 +48,5 @@ async function handleDELETE(
   }
 }
 
-export const PATCH = withAuth<{ params: Promise<{ id: string }> }>(handlePATCH);
-export const DELETE = withAuth<{ params: Promise<{ id: string }> }>(handleDELETE);
+export const PATCH = withAuth<{ params: Promise<{ id: string }> }>(handlePATCH, { allowAgent: true });
+export const DELETE = withAuth<{ params: Promise<{ id: string }> }>(handleDELETE, { allowAgent: true });

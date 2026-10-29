@@ -36,6 +36,6 @@ async function handleDELETE(req: NextRequest, { user }: { user: DecodedIdToken }
 }
 
 export const GET = withPublicRead(handleGET);
-export const POST = withAuth(handlePOST);
-export const PUT = withAuth(handlePUT);
-export const DELETE = withAuth(handleDELETE);
+export const POST = withAuth(handlePOST, { allowAgent: true });
+export const PUT = withAuth(handlePUT, { allowAgent: true });
+export const DELETE = withAuth(handleDELETE, { allowAgent: true });

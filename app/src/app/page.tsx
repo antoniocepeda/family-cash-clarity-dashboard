@@ -6,6 +6,7 @@ import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
 import RunwayView from "@/components/RunwayView";
+import AgentActivity from "@/components/AgentActivity";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -55,8 +56,12 @@ export default function Dashboard() {
   }, [fetchProjection]);
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    void fetchAll();
+  }, [fetchAll, user]);
 
   const handleProjectionDaysChange = (days: 14 | 30 | 60 | 90 | 120 | 150 | 180) => {
     setProjectionDays(days);
@@ -187,6 +192,8 @@ export default function Dashboard() {
             onLogTransaction={handleLogTransaction}
           />
         </div>}
+
+        {user && <AgentActivity />}
       </main>
     </>
   );

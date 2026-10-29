@@ -55,3 +55,11 @@ env:
     secret: plaidEnv
     availability:
       - RUNTIME
+  # Shared secret for Antonio's assistant. Runtime only, so it is not baked
+  # into the browser bundle. Unset or empty disables the agent path.
+  - variable: AGENT_API_KEY
+    secret: agentApiKey
+    availability:
+      - RUNTIME
+  # ALLOW_PUBLIC_READ is intentionally omitted. Unauthenticated reads stay
+  # off unless this variable is set to the string "true".
