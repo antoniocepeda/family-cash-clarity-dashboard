@@ -27,8 +27,8 @@ export default function TransactionsPage() {
         <Nav />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
-            <p className="mt-4 text-sm text-slate-500 font-medium">Loading transactions...</p>
+            <div className="spinner" role="status" aria-label="Loading" />
+            <p className="mt-4 text-sm text-[var(--muted)]">Loading transactions...</p>
           </div>
         </div>
       </>
@@ -38,7 +38,7 @@ export default function TransactionsPage() {
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 flex-1">
+      <main className="page-shell">
         <LedgerStatement accounts={accounts} onRefresh={fetchAccounts} />
       </main>
     </>

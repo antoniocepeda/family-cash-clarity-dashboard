@@ -6,20 +6,22 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { authFetch } from "@/lib/auth-fetch";
 
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/expenses", label: "Calendar" },
+  { href: "/transactions", label: "Ledger" },
+  { href: "/manage", label: "Accounts" },
+  { href: "/trends", label: "Trends" },
+];
+
 export default function Nav() {
   const pathname = usePathname();
   const { user, signOutUser } = useAuth();
   const [checking, setChecking] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-
-  const links = [
-    { href: "/", label: "Dashboard" },
-    { href: "/expenses", label: "Cash Calendar" },
-    { href: "/transactions", label: "Transactions" },
-    { href: "/manage", label: "Manage" },
-  ];
 
   const handleSyncBank = async () => {
     setSyncing(true);
@@ -90,75 +92,133 @@ export default function Nav() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-lg">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="shrink-0">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Cash Clarity</h1>
-            <p className="text-[10px] text-slate-400 -mt-0.5">Family Dashboard</p>
-          </Link>
-          <nav className="flex items-center gap-1">
-            {links.map((link) => {
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-                  }`}
+    <>
+      <header className="topbar">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+          <div className="flex min-w-0 items-center gap-6">
+            <Link href="/" className="shrink-0">
+              <p className="eyebrow">Cash</p>
+              <p className="-mt-0.5 text-[15px] font-medium tracking-tight text-[var(--text)]">Clarity</p>
+            </Link>
+            <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+              {links.map((link) => {
+                const active = pathname === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={active ? "page" : undefined}
+                    className={`rounded-full px-3 py-2 text-sm transition-colors ${
+                      active
+                        ? "text-[var(--text)]"
+                        : "text-[var(--muted)] hover:text-[var(--text)]"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div className="hidden items-center gap-2 md:flex">
+            {user && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleCheckBank()}
+                  disabled={checking || syncing}
+                  className="btn btn-ghost"
                 >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+                  {checking ? "Checking..." : "Check bank"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSyncBank()}
+                  disabled={syncing || checking}
+                  className="btn btn-ghost"
+                >
+                  {syncing ? "Syncing..." : "Sync bank"}
+                </button>
+              </>
+            )}
+            {user?.email && (
+              <span className="max-w-40 truncate text-xs text-[var(--muted)]">{user.email}</span>
+            )}
+            {user ? (
+              <button type="button" onClick={() => void signOutUser()} className="btn btn-ghost">
+                Sign out
+              </button>
+            ) : (
+              <Link href={`/login?next=${encodeURIComponent(pathname)}`} className="btn btn-primary">
+                Sign in
+              </Link>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 md:hidden">
+            {!user && (
+              <Link href={`/login?next=${encodeURIComponent(pathname)}`} className="btn btn-primary px-4">
+                Sign in
+              </Link>
+            )}
+            {user && (
+              <button
+                type="button"
+                aria-expanded={menuOpen}
+                aria-controls="account-menu"
+                onClick={() => setMenuOpen((open) => !open)}
+                className="btn btn-ghost px-3"
+              >
+                Menu
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void handleCheckBank()}
-            disabled={checking || syncing}
-            hidden={!user}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+
+        {menuOpen && user && (
+          <div id="account-menu" className="border-t border-[var(--line)] px-4 py-3 md:hidden">
+            <p className="truncate text-xs text-[var(--muted)]">{user.email}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void handleCheckBank()}
+                disabled={checking || syncing}
+                className="btn btn-ghost"
+              >
+                {checking ? "Checking..." : "Check bank"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSyncBank()}
+                disabled={syncing || checking}
+                className="btn btn-ghost"
+              >
+                {syncing ? "Syncing..." : "Sync bank"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void signOutUser()}
+                className="btn btn-ghost col-span-2"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(syncMessage || syncError) && (
+          <div
+            className={`border-t px-4 py-2 text-xs sm:px-6 ${
+              syncError
+                ? "border-[var(--line)] bg-[var(--negative-soft)] text-[var(--negative)]"
+                : "border-[var(--line)] bg-[var(--positive-soft)] text-[var(--positive)]"
+            }`}
           >
-            {checking ? "Checking..." : "Check Bank"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSyncBank()}
-            disabled={syncing || checking}
-            hidden={!user}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
-          >
-            {syncing ? "Syncing..." : "Sync Bank"}
-          </button>
-          {user?.email && (
-            <span className="hidden sm:inline text-xs font-medium text-slate-500">
-              {user.email}
-            </span>
-          )}
-          {user ? <button
-            type="button"
-            onClick={() => void signOutUser()}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-          >
-            Sign out
-          </button> : <Link
-            href={`/login?next=${encodeURIComponent(pathname)}`}
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Sign in to edit
-          </Link>}
-        </div>
-      </div>
-      {(syncMessage || syncError) && (
-        <div className={`border-t px-4 sm:px-6 py-2 text-xs font-medium ${syncError ? "border-red-100 bg-red-50 text-red-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}>
-          <div className="mx-auto max-w-6xl">{syncError || syncMessage}</div>
-        </div>
-      )}
-    </header>
+            <div className="mx-auto max-w-6xl">{syncError || syncMessage}</div>
+          </div>
+        )}
+      </header>
+    </>
   );
 }

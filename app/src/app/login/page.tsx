@@ -93,27 +93,27 @@ function LoginForm() {
 
   return (
     <LoginShell>
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+      <form onSubmit={handleSubmit} className="surface space-y-4 p-5">
         <button
           type="button"
           onClick={() => void handleGoogleSignIn()}
           disabled={loading || !isFirebaseConfigured}
-          className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn btn-ghost w-full"
         >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-sm font-bold text-blue-600">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--surface)] text-sm font-bold text-[var(--accent)]">
             G
           </span>
           Continue with Google
         </button>
 
         <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-400">or</span>
-          <div className="h-px flex-1 bg-slate-200" />
+          <div className="h-px flex-1 bg-[var(--surface-3)]" />
+          <span className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">or</span>
+          <div className="h-px flex-1 bg-[var(--surface-3)]" />
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="email" className="eyebrow">
             Email
           </label>
           <input
@@ -124,12 +124,12 @@ function LoginForm() {
             onChange={(event) => setEmail(event.target.value)}
             required
             disabled={!isFirebaseConfigured}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
+            className="field mt-2"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="password" className="eyebrow">
             Password
           </label>
           <input
@@ -140,12 +140,12 @@ function LoginForm() {
             onChange={(event) => setPassword(event.target.value)}
             required
             disabled={!isFirebaseConfigured}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500"
+            className="field mt-2"
           />
         </div>
 
         {(error || initialError) && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="rounded-lg border border-[color-mix(in_srgb,var(--negative)_35%,transparent)] bg-[var(--negative-soft)] px-3 py-2 text-sm text-[var(--negative)]">
             {error || initialError}
           </p>
         )}
@@ -153,7 +153,7 @@ function LoginForm() {
         <button
           type="submit"
           disabled={loading || !isFirebaseConfigured}
-          className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn btn-primary w-full"
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
@@ -164,17 +164,18 @@ function LoginForm() {
 
 function LoginShell({ children }: { children?: ReactNode }) {
   return (
-    <main className="flex-1 flex items-center justify-center px-4 py-10">
+    <main className="page-shell items-center justify-center">
       <div className="w-full max-w-sm">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Cash Clarity</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Sign in to access the family dashboard.
+          <p className="eyebrow">Cash</p>
+          <h1 className="mt-2 text-5xl font-medium tracking-[-0.05em] text-[var(--text)]">Clarity</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
+            Sign in to edit the family dashboard.
           </p>
         </div>
         {children ?? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
+            <div className="h-10 w-10 mx-auto rounded-full border-4 border-[var(--line)] border-t-[var(--accent)] animate-spin" />
           </div>
         )}
       </div>

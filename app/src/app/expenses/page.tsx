@@ -127,8 +127,8 @@ export default function ExpensesPage() {
         <Nav />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
-            <p className="mt-4 text-sm text-slate-500 font-medium">Loading expenses...</p>
+            <div className="spinner" role="status" aria-label="Loading" />
+            <p className="mt-4 text-sm text-[var(--muted)]">Loading expenses...</p>
           </div>
         </div>
       </>
@@ -138,7 +138,7 @@ export default function ExpensesPage() {
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-[96vw] px-4 sm:px-6 py-6 flex-1 space-y-6">
+      <main className="page-shell">
         <CashCalendar
           projection={projection}
           onAddEvent={handleAddCashEvent}

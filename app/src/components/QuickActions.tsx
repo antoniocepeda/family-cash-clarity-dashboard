@@ -33,10 +33,10 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
 
   return (
     <>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <button
           onClick={() => setModal("commitment")}
-          className="flex items-center gap-2 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 transition-colors"
+          className="btn btn-ghost w-full"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -45,7 +45,7 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
         </button>
         <button
           onClick={() => setModal("reconcile")}
-          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
+          className="btn btn-ghost w-full"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -54,7 +54,7 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
         </button>
         <button
           onClick={() => setModal("transaction")}
-          className="flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 transition-colors"
+          className="btn btn-ghost w-full"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
@@ -63,7 +63,7 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
         </button>
         <button
           onClick={() => setModal("account")}
-          className="flex items-center gap-2 rounded-xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-700 transition-colors"
+          className="btn btn-ghost w-full"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -117,9 +117,10 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl p-6 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--line)] bg-[var(--surface)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-in sm:rounded-2xl">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--line-strong)] sm:hidden" aria-hidden="true" />
         {children}
       </div>
     </div>
@@ -157,35 +158,35 @@ function CommitmentModal({
 
   return (
     <Overlay onClose={onClose}>
-      <h3 className="text-lg font-semibold text-slate-800 mb-4">Add Bill or Income</h3>
+      <h3 className="text-lg font-semibold text-[var(--text)] mb-4">Add Bill or Income</h3>
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Type</label>
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
               <option value="bill">Bill / Expense</option>
               <option value="income">Income</option>
             </select>
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Electric Bill" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Name</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Electric Bill" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Amount ($)</label>
-            <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" min="0" step="0.01" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Amount ($)</label>
+            <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" min="0" step="0.01" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Due Date</label>
-            <input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Due Date</label>
+            <input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Recurrence</label>
-            <select value={isCustom ? "custom" : form.recurrence_rule} onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Recurrence</label>
+            <select value={isCustom ? "custom" : form.recurrence_rule} onChange={(e) => setForm({ ...form, recurrence_rule: e.target.value })} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
               <option value="">One-time</option>
               <option value="weekly">Weekly</option>
               <option value="biweekly">Biweekly</option>
@@ -197,10 +198,10 @@ function CommitmentModal({
           </div>
           {isCustom ? (
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Every how many?</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Every how many?</label>
               <div className="flex gap-2">
-                <input type="number" value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="e.g., 6" min="1" step="1" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
-                <select value={customUnit} onChange={(e) => setCustomUnit(e.target.value as "days" | "weeks")} className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+                <input type="number" value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="e.g., 6" min="1" step="1" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
+                <select value={customUnit} onChange={(e) => setCustomUnit(e.target.value as "days" | "weeks")} className="rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
                   <option value="days">Days</option>
                   <option value="weeks">Weeks</option>
                 </select>
@@ -208,8 +209,8 @@ function CommitmentModal({
             </div>
           ) : (
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
-              <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Account</label>
+              <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
                 {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
               </select>
             </div>
@@ -217,16 +218,16 @@ function CommitmentModal({
         </div>
         {isCustom && (
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
-            <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Account</label>
+            <select value={form.account_id} onChange={(e) => setForm({ ...form, account_id: e.target.value })} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
               {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
             </select>
           </div>
         )}
       </div>
       <div className="flex justify-end gap-3 mt-5">
-        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
-        <button onClick={() => onSubmit({ ...form, recurrence_rule: effectiveRule, amount: parseFloat(form.amount) || 0 })} disabled={!form.name || !form.amount || (isCustom && !customValue)} className="px-5 py-2 text-sm font-semibold text-white bg-sky-600 rounded-lg hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">Cancel</button>
+        <button onClick={() => onSubmit({ ...form, recurrence_rule: effectiveRule, amount: parseFloat(form.amount) || 0 })} disabled={!form.name || !form.amount || (isCustom && !customValue)} className="px-5 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           Add {form.type === "income" ? "Income" : "Bill"}
         </button>
       </div>
@@ -249,23 +250,23 @@ function ReconcileModal({
 
   return (
     <Overlay onClose={onClose}>
-      <h3 className="text-lg font-semibold text-slate-800 mb-4">Sync with Bank</h3>
+      <h3 className="text-lg font-semibold text-[var(--text)] mb-4">Sync with Bank</h3>
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Account</label>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Account</label>
+          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
             {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name} — ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</option>))}
           </select>
         </div>
-        {selected && (<p className="text-sm text-slate-500">Current balance: <strong>${selected.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></p>)}
+        {selected && (<p className="text-sm text-[var(--muted)]">Current balance: <strong>${selected.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></p>)}
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Actual Balance ($)</label>
-          <input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="Enter what your bank shows" step="0.01" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Actual Balance ($)</label>
+          <input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="Enter what your bank shows" step="0.01" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
         </div>
       </div>
       <div className="flex justify-end gap-3 mt-5">
-        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
-        <button onClick={() => onSubmit(accountId, parseFloat(balance))} disabled={!balance} className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Update Balance</button>
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">Cancel</button>
+        <button onClick={() => onSubmit(accountId, parseFloat(balance))} disabled={!balance} className="px-5 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Update Balance</button>
       </div>
     </Overlay>
   );
@@ -282,16 +283,16 @@ function AccountModal({
 
   return (
     <Overlay onClose={onClose}>
-      <h3 className="text-lg font-semibold text-slate-800 mb-4">Add Account</h3>
+      <h3 className="text-lg font-semibold text-[var(--text)] mb-4">Add Account</h3>
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Account Name</label>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Main Checking" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Account Name</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g., Main Checking" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none">
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Type</label>
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
               <option value="checking">Checking</option>
               <option value="savings">Savings</option>
               <option value="cash">Cash</option>
@@ -299,18 +300,18 @@ function AccountModal({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Balance ($)</label>
-            <input type="number" value={form.current_balance} onChange={(e) => setForm({ ...form, current_balance: e.target.value })} placeholder="0.00" step="0.01" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none" />
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Balance ($)</label>
+            <input type="number" value={form.current_balance} onChange={(e) => setForm({ ...form, current_balance: e.target.value })} placeholder="0.00" step="0.01" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
           </div>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input type="checkbox" checked={form.is_reserve} onChange={(e) => setForm({ ...form, is_reserve: e.target.checked })} className="rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
+        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <input type="checkbox" checked={form.is_reserve} onChange={(e) => setForm({ ...form, is_reserve: e.target.checked })} className="rounded border-[var(--line-strong)] text-[var(--accent)] focus:ring-[var(--accent)]" />
           Reserve account (excluded from &ldquo;True Available&rdquo;)
         </label>
       </div>
       <div className="flex justify-end gap-3 mt-5">
-        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">Cancel</button>
-        <button onClick={() => onSubmit({ ...form, current_balance: parseFloat(form.current_balance) || 0 })} disabled={!form.name} className="px-5 py-2 text-sm font-semibold text-white bg-slate-700 rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Add Account</button>
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">Cancel</button>
+        <button onClick={() => onSubmit({ ...form, current_balance: parseFloat(form.current_balance) || 0 })} disabled={!form.name} className="px-5 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Add Account</button>
       </div>
     </Overlay>
   );
@@ -461,22 +462,23 @@ function TransactionWizard({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4">
       <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[var(--line)] bg-[var(--surface)] animate-in sm:rounded-2xl">
+        <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-[var(--line-strong)] sm:hidden" aria-hidden="true" />
 
         {step === 1 && (
           <div className="p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-slate-800">Where are you shopping?</h3>
-                <p className="text-xs text-slate-400">Step 1 of 2</p>
+                <h3 className="text-lg font-semibold text-[var(--text)]">Where are you shopping?</h3>
+                <p className="text-xs text-[var(--muted)]">Step 1 of 2</p>
               </div>
             </div>
 
@@ -486,17 +488,17 @@ function TransactionWizard({
               onKeyDown={(e) => { if (e.key === "Enter" && storeName.trim()) setStep(2); }}
               placeholder="e.g., Costco, Amazon, Target, Walmart"
               autoFocus
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+              className="w-full rounded-xl border border-[var(--line-strong)] px-4 py-3 text-base focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none"
             />
 
             <div className="flex justify-end gap-3 mt-6">
-              <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
+              <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">
                 Cancel
               </button>
               <button
                 onClick={() => setStep(2)}
                 disabled={!storeName.trim()}
-                className="px-5 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>
@@ -510,7 +512,7 @@ function TransactionWizard({
               <div className="flex items-center gap-3 mb-1">
                 <button
                   onClick={() => setStep(1)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[var(--surface-3)] transition-colors text-[var(--muted)] hover:text-[var(--text)]"
                   title="Back to store name"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -518,9 +520,9 @@ function TransactionWizard({
                   </svg>
                 </button>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-slate-800">What are you buying?</h3>
-                  <p className="text-xs text-slate-400">
-                    Shopping at <span className="font-medium text-amber-600">{storeName}</span> · Step 2 of 2
+                  <h3 className="text-lg font-semibold text-[var(--text)]">What are you buying?</h3>
+                  <p className="text-xs text-[var(--muted)]">
+                    Shopping at <span className="font-medium text-[var(--warning)]">{storeName}</span> · Step 2 of 2
                   </p>
                 </div>
               </div>
@@ -528,13 +530,13 @@ function TransactionWizard({
 
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
               {items.map((item, idx) => (
-                <div key={item.key} className="rounded-xl border border-slate-200 p-3 space-y-2 bg-slate-50/50">
+                <div key={item.key} className="rounded-xl border border-[var(--line)] p-3 space-y-2 bg-[var(--surface-2)]">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Item {idx + 1}</span>
+                    <span className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">Item {idx + 1}</span>
                     {items.length > 1 && (
                       <button
                         onClick={() => removeItem(item.key)}
-                        className="text-slate-300 hover:text-red-500 transition-colors"
+                        className="text-[var(--faint)] hover:text-[var(--negative)] transition-colors"
                         title="Remove item"
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -548,7 +550,7 @@ function TransactionWizard({
                     onChange={(e) => updateItem(item.key, "description", e.target.value)}
                     placeholder="What did you buy?"
                     autoFocus={idx === items.length - 1}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                    className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none bg-[var(--surface)]"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -559,14 +561,14 @@ function TransactionWizard({
                         placeholder="How much? ($)"
                         min="0"
                         step="0.01"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                        className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none bg-[var(--surface)]"
                       />
                     </div>
                     <div>
                       <select
                         value={item.instanceKey}
                         onChange={(e) => updateItem(item.key, "instanceKey", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                        className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none bg-[var(--surface)]"
                       >
                         <option value="">No expense</option>
                         {!loadingInstances && eligibleInstances.map((inst) => {
@@ -585,7 +587,7 @@ function TransactionWizard({
 
               <button
                 onClick={addItem}
-                className="w-full rounded-xl border-2 border-dashed border-slate-200 hover:border-amber-300 py-3 text-sm font-medium text-slate-400 hover:text-amber-600 transition-colors flex items-center justify-center gap-2"
+                className="w-full rounded-xl border-2 border-dashed border-[var(--line)] hover:border-[var(--line-strong)] py-3 text-sm font-medium text-[var(--muted)] hover:text-[var(--warning)] transition-colors flex items-center justify-center gap-2"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -594,21 +596,21 @@ function TransactionWizard({
               </button>
             </div>
 
-            <div className="border-t border-slate-200 p-6 pt-4 space-y-3 bg-white rounded-b-2xl">
+            <div className="border-t border-[var(--line)] p-6 pt-4 space-y-3 bg-[var(--surface)] rounded-b-2xl">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-600">Total</span>
-                <span className="text-lg font-bold text-slate-800">
+                <span className="text-sm font-medium text-[var(--text-secondary)]">Total</span>
+                <span className="text-lg font-bold text-[var(--text)]">
                   ${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Account</label>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Account</label>
                   <select
                     value={accountId}
                     onChange={(e) => setAccountId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none"
                   >
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>
@@ -618,11 +620,11 @@ function TransactionWizard({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Type</label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none"
                   >
                     <option value="expense">Spent</option>
                     <option value="income">Received</option>
@@ -631,13 +633,13 @@ function TransactionWizard({
               </div>
 
               <div className="flex justify-end gap-3 pt-1">
-                <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors">
+                <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">
                   Cancel
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={!canSubmit}
-                  className="px-6 py-2.5 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-6 py-2.5 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Log It
                 </button>

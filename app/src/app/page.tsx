@@ -141,12 +141,15 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-10 w-10 mx-auto rounded-full border-4 border-sky-200 border-t-sky-600 animate-spin" />
-          <p className="mt-4 text-sm text-slate-500 font-medium">Loading dashboard...</p>
+      <>
+        <Nav />
+        <div className="flex flex-1 items-center justify-center">
+          <div className="text-center">
+            <div className="spinner" role="status" aria-label="Loading" />
+            <p className="mt-4 text-sm text-[var(--muted)]">Loading dashboard...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -154,7 +157,7 @@ export default function Dashboard() {
     <>
       <Nav />
 
-      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-6 space-y-6 flex-1 w-full">
+      <main className="page-shell">
         <CashPositionStrip accounts={accounts} commitments={commitments} projection={trendProjection} lastUpdated={lastUpdated} />
 
         <div>
@@ -174,8 +177,8 @@ export default function Dashboard() {
           onUpdateInstance={user ? handleUpdateInstance : undefined}
         />
 
-        {user && <div className="border-t border-slate-200 pt-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Actions</h2>
+        {user && <div className="border-t border-[var(--line)] pt-6">
+          <h2 className="eyebrow mb-4">Quick actions</h2>
           <QuickActions
             accounts={accounts}
             onAddCommitment={handleAddCommitment}

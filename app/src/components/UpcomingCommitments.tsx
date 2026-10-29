@@ -125,29 +125,30 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
 
   if (allRows.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400">
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 text-center text-[var(--muted)]">
         No expenses. Add income or bills to get started.
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-sm overflow-hidden">
       <div className="p-5 pb-3">
-        <h2 className="text-lg font-semibold text-slate-800">Cash Events</h2>
+        <p className="eyebrow">Commitments</p>
+        <h2 className="mt-1 text-3xl font-medium text-[var(--text)]">Upcoming</h2>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="data-list w-full text-sm">
           <thead>
-            <tr className="border-y border-slate-100 bg-slate-50/50">
-              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Event</th>
-              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
-              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Due</th>
-              <th className="px-5 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Recurrence</th>
-              <th className="px-5 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
+            <tr className="border-y border-[var(--line)] bg-[var(--surface-2)]">
+              <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Event</th>
+              <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Amount</th>
+              <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Due</th>
+              <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Recurrence</th>
+              <th className="px-5 py-2.5 text-right text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[var(--line)]">
             {allRows.map((row) => {
               const { commitment, occurrenceDate, instance } = row;
               const daysUntil = differenceInDays(occurrenceDate, today);
@@ -163,24 +164,24 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
               return (
                 <tr
                   key={`${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`}
-                  className={`hover:bg-slate-50/50 transition-colors ${isFunded ? "opacity-60" : ""}`}
+                  className={`hover:bg-[var(--surface-3)] transition-colors ${isFunded ? "opacity-60" : ""}`}
                 >
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3" data-label="">
                     <div className="flex items-center gap-2">
                       <span
                         className={`h-2 w-2 rounded-full shrink-0 ${
-                          commitment.type === "income" ? "bg-emerald-500" : isFunded ? "bg-emerald-400" : "bg-rose-400"
+                          commitment.type === "income" ? "bg-[var(--positive)]" : isFunded ? "bg-[var(--positive)]" : "bg-[var(--negative)]"
                         }`}
                       />
-                      <span className="font-medium text-slate-800">{commitment.name}</span>
+                      <span className="font-medium text-[var(--text)]">{commitment.name}</span>
                       {isFunded && (
-                        <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-semibold bg-[var(--positive-soft)] text-[var(--positive)] px-1.5 py-0.5 rounded">
                           PAID
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3" data-label="Amount">
                     {(() => {
                       const rowKey = `${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`;
                       const isEditing = editingKey === rowKey;
@@ -204,7 +205,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                       if (isEditing) {
                         return (
                           <div className="flex items-center gap-1">
-                            <span className="text-slate-400 text-sm">$</span>
+                            <span className="text-[var(--muted)] text-sm">$</span>
                             <input
                               ref={editInputRef}
                               type="number"
@@ -217,7 +218,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                               onBlur={handleSaveEdit}
                               min="0"
                               step="0.01"
-                              className="w-24 rounded border border-sky-300 px-2 py-1 text-sm font-semibold focus:ring-2 focus:ring-sky-500 outline-none"
+                              className="w-24 rounded border border-[var(--line-strong)] px-2 py-1 text-sm font-semibold focus:ring-2 focus:ring-[var(--accent)] outline-none"
                             />
                           </div>
                         );
@@ -232,28 +233,28 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                           <div className="flex items-baseline gap-1">
                             <span
                               className={`font-semibold ${
-                                commitment.type === "income" ? "text-emerald-600" : "text-slate-800"
+                                commitment.type === "income" ? "text-[var(--positive)]" : "text-[var(--text)]"
                               }`}
                             >
                               {commitment.type === "income" ? "+" : "−"}$
                               {remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                             </span>
                             {allocated > 0.005 && (
-                              <span className="text-[10px] text-slate-400">
+                              <span className="text-[10px] text-[var(--muted)]">
                                 / ${planned.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </span>
                             )}
                             {onEditInstanceAmount && !isFunded && (
-                              <svg className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <svg className="h-3 w-3 text-[var(--faint)] opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                               </svg>
                             )}
                           </div>
                           {allocated > 0.005 && (
-                            <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                            <div className="mt-1 h-1.5 w-full rounded-full bg-[var(--surface-2)] overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${
-                                  isFunded ? "bg-emerald-400" : "bg-amber-400"
+                                  isFunded ? "bg-[var(--positive)]" : "bg-[var(--warning)]"
                                 }`}
                                 style={{ width: `${progressPct}%` }}
                               />
@@ -263,35 +264,35 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                       );
                     })()}
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3" data-label="Due">
                     <div className="flex items-center gap-1.5">
-                      <span className={`${isOverdue ? "text-red-600 font-semibold" : isDueSoon ? "text-amber-600 font-medium" : "text-slate-600"}`}>
+                      <span className={`${isOverdue ? "text-[var(--negative)] font-semibold" : isDueSoon ? "text-[var(--warning)] font-medium" : "text-[var(--text-secondary)]"}`}>
                         {format(occurrenceDate, "MMM d")}
                       </span>
                       {isOverdue && (
-                        <span className="text-[10px] font-bold text-red-600">OVERDUE</span>
+                        <span className="text-[10px] font-bold text-[var(--negative)]">OVERDUE</span>
                       )}
                       {isDueSoon && !isOverdue && (
-                        <span className="text-[10px] font-semibold text-amber-600">SOON</span>
+                        <span className="text-[10px] font-semibold text-[var(--warning)]">SOON</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-slate-500 capitalize">
+                  <td className="px-5 py-3 text-[var(--muted)] capitalize" data-label="Repeats">
                     {commitment.recurrence_rule?.startsWith("every_") && commitment.recurrence_rule?.endsWith("_days")
                       ? `Every ${commitment.recurrence_rule.slice(6, -5)} days`
                       : commitment.recurrence_rule?.startsWith("every_") && commitment.recurrence_rule?.endsWith("_weeks")
                       ? `Every ${commitment.recurrence_rule.slice(6, -6)} weeks`
                       : commitment.recurrence_rule || "One-time"}
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-5 py-3 text-right" data-label="Action">
                     <div className="flex items-center justify-end gap-2">
                       {!commitment.recurrence_rule && isAfter(parseISO(commitment.due_date), projectionCutoff) && (
                         <button
                           onClick={() => onSimulateToggle(commitment.id)}
                           className={`text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
                             simulatedIds.has(commitment.id)
-                              ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
-                              : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                              ? "bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                              : "bg-[var(--surface-2)] text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
                           }`}
                           title="Simulate paying this early in the 28-day projection"
                         >
@@ -304,14 +305,14 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                             setEditingKey(`${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`);
                             setEditValue(planned.toFixed(2));
                           }}
-                          className="text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                          className="text-xs font-medium text-[var(--accent)] bg-[var(--accent-soft)] hover:bg-[var(--accent-soft)] px-2.5 py-1.5 rounded-lg transition-colors"
                           title="Update this bill occurrence when the actual amount is known"
                         >
                           Adjust
                         </button>
                       )}
                       {isFunded ? (
-                        <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                        <span className="text-xs font-medium text-[var(--positive)] bg-[var(--positive-soft)] px-3 py-1.5 rounded-lg">
                           <svg className="h-3.5 w-3.5 inline -mt-0.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
@@ -330,7 +331,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                               }
                             }}
                           >
-                            <span className="text-xs text-slate-400">$</span>
+                            <span className="text-xs text-[var(--muted)]">$</span>
                             <input
                               autoFocus
                               type="number"
@@ -338,16 +339,16 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                               step="0.01"
                               value={receiveValue}
                               onChange={(event) => setReceiveValue(event.target.value)}
-                              className="w-24 rounded border border-emerald-300 px-2 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500"
+                              className="w-24 rounded border border-[color-mix(in_srgb,var(--positive)_45%,transparent)] px-2 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-[var(--accent)]"
                               aria-label={`Actual amount received for ${commitment.name}`}
                             />
-                            <button className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                            <button className="rounded-lg bg-[var(--text)] px-2.5 py-1.5 text-xs font-semibold text-[var(--ink)] hover:opacity-90">
                               Save
                             </button>
                             <button
                               type="button"
                               onClick={() => setReceivingKey(null)}
-                              className="rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+                              className="rounded-lg px-2 py-1.5 text-xs font-medium text-[var(--muted)] hover:text-[var(--text)]"
                             >
                               Cancel
                             </button>
@@ -358,7 +359,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                               setReceivingKey(`${commitment.id}-${format(occurrenceDate, "yyyy-MM-dd")}`);
                               setReceiveValue(planned.toFixed(2));
                             }}
-                            className="text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                            className="text-xs font-medium text-[var(--positive)] bg-[var(--positive-soft)] hover:bg-[var(--positive-soft)] px-2.5 py-1.5 rounded-lg transition-colors"
                             title="Record the amount that actually arrived"
                           >
                             Receive
@@ -371,7 +372,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                               const dueDate = format(occurrenceDate, "yyyy-MM-dd");
                               onLeftover(commitment.id, dueDate, "rollover");
                             }}
-                            className="text-xs font-medium text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                            className="text-xs font-medium text-[var(--warning)] hover:text-[var(--warning)] bg-[var(--warning-soft)] hover:bg-[var(--warning-soft)] px-2.5 py-1.5 rounded-lg transition-colors"
                             title="Carry leftover into next period's envelope"
                           >
                             Roll Over ${remaining.toFixed(2)}
@@ -381,7 +382,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                               const dueDate = format(occurrenceDate, "yyyy-MM-dd");
                               onLeftover(commitment.id, dueDate, "release");
                             }}
-                            className="text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                            className="text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] px-2.5 py-1.5 rounded-lg transition-colors"
                             title="Release unspent amount back to cash on hand"
                           >
                             Release ${remaining.toFixed(2)}
@@ -393,7 +394,7 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                             const dueDate = format(occurrenceDate, "yyyy-MM-dd");
                             onRollover(commitment.id, dueDate);
                           }}
-                          className="text-xs font-medium text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                          className="text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] px-2.5 py-1.5 rounded-lg transition-colors"
                           title="Skip remaining and move to next cycle"
                         >
                           Rollover
