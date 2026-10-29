@@ -87,10 +87,14 @@ NEXT_PUBLIC_AUTHORIZED_EMAILS
 PUBLIC_DATA_OWNER_UID
 ```
 
-`PUBLIC_DATA_OWNER_UID` is the Firebase Auth UID for the household owner whose
-read-only dashboard data should be shown to visitors. Visitors can view the
-dashboard and read-only pages without signing in; all writes still require an
-authorized Firebase user. Set this value in App Hosting before going live.
+`PUBLIC_DATA_OWNER_UID` is the Firebase Auth UID of the household owner. A
+configured `AGENT_API_KEY` acts as this user. If the UID is unset or still the
+placeholder `SET_TO_HOUSEHOLD_OWNER_FIREBASE_UID`, the server resolves the
+owner from the first address in `NEXT_PUBLIC_AUTHORIZED_EMAILS`.
+
+The browser dashboard requires an authorized Firebase login. Unauthenticated
+visitors do not receive household data unless `ALLOW_PUBLIC_READ` is set to
+the string `true`. Leave that variable unset in production.
 
 Required runtime-only Plaid secrets:
 
@@ -116,6 +120,7 @@ Create the Plaid secrets before deploying:
 firebase apphosting:secrets:set plaidClientId --project <firebase-project-id>
 firebase apphosting:secrets:set plaidSecret --project <firebase-project-id>
 firebase apphosting:secrets:set plaidEnv --project <firebase-project-id>
+firebase apphosting:secrets:set agentApiKey --project <firebase-project-id>
 ```
 
 Set `plaidEnv` to `sandbox`, `development`, or `production`. If you create or manage any values directly in Google Cloud Secret Manager instead, grant the App Hosting backend/service account access to each secret, for example with:
@@ -129,6 +134,7 @@ firebase apphosting:secrets:grantaccess authorizedEmails --project <firebase-pro
 firebase apphosting:secrets:grantaccess plaidClientId --project <firebase-project-id>
 firebase apphosting:secrets:grantaccess plaidSecret --project <firebase-project-id>
 firebase apphosting:secrets:grantaccess plaidEnv --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess agentApiKey --project <firebase-project-id>
 ```
 
 Redeploy the App Hosting backend after creating or rotating these values. Plaid secrets must not be committed, logged, returned from API routes, or imported into client components. `NEXT_PUBLIC_*` values are included in the browser bundle and should not contain confidential credentials.
@@ -151,6 +157,66 @@ Some production setup must be completed in Firebase Console or through an authen
 
 Keep the first App Hosting backend focused on stable production deploys from `main`. After production rollouts are consistently healthy, add preview deployments for pull requests or non-production branches using a separate preview backend or App Hosting preview workflow with the same `app` root, `npm ci`, `npm run build`, and non-production Firebase/Plaid values.
 
+## Agent API
+
+The assistant authenticates with a server-only `AGENT_API_KEY`. The key is
+compared in constant time and is never logged. If the variable is unset or
+blank, this path is disabled and those requests receive 401.
+
+The key acts as the household owner for read and write routes used by the
+dashboard: accounts, commitments, commitment instances, ledger entries and
+allocations, alerts, projections, trends, and the leftover, mark-paid, and
+rollover actions. It cannot call Plaid routes, `/api/reset`, `/api/seed`, or
+`/api/debug/context`. Those stay limited to an authorized Firebase user.
+
+Create a long random value, store it in Secret Manager, and grant the App
+Hosting backend access:
+
+```bash
+openssl rand -base64 32
+firebase apphosting:secrets:set agentApiKey --project <firebase-project-id>
+firebase apphosting:secrets:grantaccess agentApiKey --project <firebase-project-id>
+```
+
+`apphosting.yaml` maps that secret to `AGENT_API_KEY` at runtime. For local
+development, put the same value in `app/.env.local` and do not prefix it with
+`NEXT_PUBLIC_`. Restart `npm run dev` after changing it.
+
+Send the key as `Authorization: Bearer <key>` or `X-Agent-Key: <key>`.
+Examples below use `$AGENT_API_KEY` and an App Hosting URL:
+
+```bash
+# List commitments
+curl -sS \
+  -H "Authorization: Bearer $AGENT_API_KEY" \
+  "https://<backend>/api/commitments"
+
+# Create a monthly bill. account_id comes from GET /api/accounts.
+curl -sS -X POST \
+  -H "X-Agent-Key: $AGENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Electricity","type":"bill","amount":120,"due_date":"2026-11-02","recurrence_rule":"monthly","priority":"normal","account_id":"<account-id>"}' \
+  "https://<backend>/api/commitments"
+
+# Log an expense and allocate it to a commitment instance.
+curl -sS -X POST \
+  -H "Authorization: Bearer $AGENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"description":"Groceries","amount":85.40,"type":"expense","account_id":"<account-id>","allocations":[{"commitment_id":"<commitment-id>","instance_due_date":"2026-11-03","amount":85.40}]}' \
+  "https://<backend>/api/ledger"
+```
+
+Agent writes are stored at `users/{ownerUid}/agentAudit` with the method,
+route, time, response status, and a short redacted summary of the body. The
+signed-in dashboard lists the latest entries under "Recent agent changes."
+A full data reset does not delete this trail. Browser edits made with a
+Firebase login are not written there.
+
+To allow anonymous read-only access again, set `ALLOW_PUBLIC_READ` to `true`
+for the App Hosting backend and redeploy. Any other value, including omitting
+the variable, keeps anonymous reads disabled. Writes never use this flag.
+The browser UI does not use anonymous read; it sends the Firebase ID token.
+
 ## Firestore Data
 
 The app stores data in Firestore using Firebase Admin from server-only API routes. Runtime filesystem storage is not used as the source of truth, so the app can run across Firebase App Hosting/Cloud Run instances.
@@ -168,6 +234,7 @@ users/{userId}/ledgerItems/{itemId}
 users/{userId}/plaidItems/{itemId}
 users/{userId}/plaidAccounts/{plaidAccountId}
 users/{userId}/plaidSync/{itemId}
+users/{userId}/agentAudit/{auditId}
 ```
 
 Each persisted document includes stable `createdAt` and `updatedAt` fields. Existing API responses keep the app's snake_case fields for UI compatibility.
@@ -225,6 +292,6 @@ KB.md              User guide and product knowledge base
 
 ## Notes
 
-- The dashboard requires Firebase Authentication; server routes also check the authorized user email list.
+- The dashboard requires Firebase Authentication; server routes also check the authorized user email list. Anonymous reads stay off unless `ALLOW_PUBLIC_READ=true`.
 - Projection and alert accuracy depends on keeping account balances reconciled and commitments up to date.
 - The app uses system fonts so builds do not depend on downloading Google-hosted fonts.

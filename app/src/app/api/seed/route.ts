@@ -62,4 +62,5 @@ async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) 
   return NextResponse.json({ success: true, message: "Seed data loaded" });
 }
 
+// Firebase users only. AGENT_API_KEY must not be able to wipe and reseed household data.
 export const POST = withAuth(handlePOST);

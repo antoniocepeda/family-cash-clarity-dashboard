@@ -8,4 +8,5 @@ async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken })
   return NextResponse.json({ success: true, message: "All data cleared" });
 }
 
+// Firebase users only. AGENT_API_KEY must not be able to wipe household data.
 export const POST = withAuth(handlePOST);

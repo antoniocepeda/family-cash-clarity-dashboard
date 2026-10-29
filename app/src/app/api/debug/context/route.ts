@@ -45,5 +45,6 @@ async function handleGET(_req: NextRequest, { user }: { user: DecodedIdToken }) 
   return NextResponse.json(debug);
 }
 
+// Firebase users only. This route is not public, and AGENT_API_KEY cannot call it.
 export const GET = withAuth(handleGET);
 
