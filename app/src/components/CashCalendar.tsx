@@ -244,7 +244,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
           <h1 className="mt-1 text-3xl font-medium text-[var(--text)]">Cash</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Select a date to review it. Add an expense or deposit, or drag items on a larger screen to move due dates.</p>
         </div>
-        <div className="scroll-row text-xs font-semibold">
+        <div className="scroll-row text-xs font-semibold lg:flex-wrap lg:justify-end lg:overflow-visible">
           {(["safe", "tight", "below buffer", "negative", "overdue"] as RiskState[]).map((risk) => (
             <span key={risk} className={`rounded-full px-2 py-1 capitalize ${riskLabelClasses(risk)}`}>{risk}</span>
           ))}
@@ -278,7 +278,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
         Add on {format(selectedDate, "MMM d")}
       </button>
 
-      <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">
+      <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)] lg:text-sm lg:tracking-[0.08em]">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
           <span key={day} className="py-2">
             <span className="sm:hidden">{day.slice(0, 1)}</span>
@@ -312,7 +312,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                 void moveItem(JSON.parse(payload) as EditableItem, dateKey).finally(() => setDraggingKey(null));
               }}
               aria-pressed={selected}
-              className={`min-h-16 rounded-lg border p-1 text-left transition-colors hover:border-[var(--line-strong)] sm:min-h-40 sm:rounded-xl sm:p-2 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
+              className={`min-h-16 rounded-lg border p-1 text-left transition-colors hover:border-[var(--line-strong)] sm:min-h-40 sm:rounded-xl sm:p-2 lg:min-h-52 xl:min-h-60 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
             >
               <div className="flex items-start justify-between gap-1">
                 <span className="text-xs font-medium text-[var(--text)] sm:text-base">{format(day, "d")}</span>
@@ -326,7 +326,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                 )}
               </div>
               {dayProjection && (
-                <div className={`mt-1 truncate text-[10px] font-medium tabular-nums sm:text-xs ${dayProjection.balance < 0 ? "text-[var(--negative)]" : "text-[var(--muted)]"}`}>
+                <div className={`mt-1 truncate text-[10px] font-medium tabular-nums sm:text-xs lg:text-sm ${dayProjection.balance < 0 ? "text-[var(--negative)]" : "text-[var(--muted)]"}`}>
                   <span className="hidden sm:inline">End </span>
                   {money(dayProjection.balance)}
                 </div>
@@ -360,7 +360,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                         event.dataTransfer.setData("application/json", JSON.stringify(item));
                       }}
                       onDragEnd={() => setDraggingKey(null)}
-                      className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing ${
+                      className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing lg:px-2 lg:py-1.5 lg:text-sm ${
                         isIncome
                           ? "border-[color-mix(in_srgb,var(--positive)_35%,transparent)] bg-[var(--surface)] text-[var(--positive)]"
                           : "border-[color-mix(in_srgb,var(--negative)_35%,transparent)] bg-[var(--surface)] text-[var(--negative)]"
