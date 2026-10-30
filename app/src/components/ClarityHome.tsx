@@ -12,7 +12,6 @@ interface Props {
   prompts: HelpPrompt[];
   lastSyncedAt: string | null;
   syncing: boolean;
-  resolvingId?: string | null;
   resolveError?: string | null;
   onResolve?: (promptId: string, choiceId: string) => void;
 }
@@ -54,7 +53,6 @@ export default function ClarityHome({
   prompts,
   lastSyncedAt,
   syncing,
-  resolvingId = null,
   resolveError = null,
   onResolve,
 }: Props) {
@@ -201,13 +199,13 @@ export default function ClarityHome({
                     <button
                       key={choice.id}
                       type="button"
-                      disabled={!onResolve || resolvingId !== null}
+                      disabled={!onResolve}
                       onClick={() => onResolve?.(prompt.id, choice.id)}
                       className={`btn min-h-11 w-full justify-start px-4 text-left text-sm ${
                         choice.action === "dismiss" ? "btn-ghost" : "btn-primary"
                       }`}
                     >
-                      {resolvingId === prompt.id ? "Saving…" : choice.label}
+                      {choice.label}
                     </button>
                   ))}
                 </div>

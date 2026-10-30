@@ -19,6 +19,8 @@ export type OpenBill = {
   plannedAmount: number;
   status: string;
   type: "income" | "bill";
+  /** Extra bank-statement names for this bill, besides the display name. */
+  bankMatchTags?: string[];
 };
 
 export type BankTxn = {
@@ -80,21 +82,82 @@ function compact(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-export function merchantScore(billName: string, txnName: string) {
-  const billTokens = tokens(billName);
+/** A bank-statement tag hit counts as a confident name match, above a single shared word. */
+const TAG_MATCH_SCORE = 3;
+
+function scoreAlias(alias: string, txnName: string) {
+  const aliasTokens = tokens(alias);
   const txnTokens = new Set(tokens(txnName));
   let shared = 0;
-  for (const token of billTokens) if (txnTokens.has(token)) shared += 1;
+  for (const token of aliasTokens) if (txnTokens.has(token)) shared += 1;
   if (shared > 0) return shared;
 
-  const billCompact = compact(billName);
+  const aliasCompact = compact(alias);
   const txnCompact = compact(txnName);
-  if (billCompact.length >= 3 && txnCompact.includes(billCompact)) return 1;
-  if (txnCompact.length >= 3 && billCompact.includes(txnCompact)) return 1;
-  for (const token of billTokens) {
+  if (aliasCompact.length >= 3 && txnCompact.includes(aliasCompact)) return 1;
+  if (txnCompact.length >= 3 && aliasCompact.includes(txnCompact)) return 1;
+  for (const token of aliasTokens) {
     if (token.length >= 4 && txnCompact.includes(token)) return 1;
   }
   return 0;
+}
+
+export function merchantScore(billName: string, txnName: string, tags: readonly string[] = []) {
+  let best = scoreAlias(billName, txnName);
+  for (const tag of tags) {
+    if (!tag.trim()) continue;
+    if (scoreAlias(tag, txnName) > 0) best = Math.max(best, TAG_MATCH_SCORE);
+  }
+  return best;
+}
+
+/** Turn a posted merchant string into a short tag, dropping payment noise. */
+export function cleanMerchantTag(merchantName: string): string | null {
+  const kept = merchantName
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !NOISE.has(token.toLowerCase()));
+  if (kept.length === 0) return null;
+  return kept.slice(0, 4).join(" ");
+}
+
+/** Parse a comma-separated field or a list into unique statement tags. */
+export function normalizeBankTags(value: unknown): string[] {
+  const parts: string[] = [];
+  const push = (item: unknown) => {
+    if (typeof item !== "string") return;
+    for (const piece of item.split(/[,;|]/)) {
+      const trimmed = piece.trim().replace(/\s+/g, " ");
+      if (trimmed) parts.push(trimmed.slice(0, 40));
+    }
+  };
+  if (Array.isArray(value)) value.forEach(push);
+  else push(value);
+
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const part of parts) {
+    const key = compact(part);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(part);
+    if (tags.length >= 12) break;
+  }
+  return tags;
+}
+
+/**
+ * Append a cleaned merchant name. Existing tags stay as written.
+ * The same name with different capitalization is not added again.
+ */
+export function learnBankTag(existing: readonly string[] | null | undefined, merchantName: string): string[] {
+  const tags = normalizeBankTags(existing);
+  const cleaned = cleanMerchantTag(merchantName);
+  if (!cleaned) return tags;
+  const key = compact(cleaned);
+  if (tags.some((tag) => compact(tag) === key)) return tags;
+  return [...tags, cleaned];
 }
 
 function money(amount: number) {
@@ -121,7 +184,7 @@ function candidatePairs(bills: OpenBill[], txns: BankTxn[], requireName: boolean
       if (bill.type !== "bill" || SETTLED.has(bill.status)) continue;
       if (!withinDateWindow(bill.dueDate, txn.date)) continue;
       if (!amountWithinTolerance(bill.plannedAmount, txn.amount)) continue;
-      const nameScore = merchantScore(bill.name, txn.name);
+      const nameScore = merchantScore(bill.name, txn.name, bill.bankMatchTags ?? []);
       if (requireName && nameScore <= 0) continue;
       pairs.push({
         bill,
@@ -145,6 +208,38 @@ function billChoice(bill: OpenBill, txn: BankTxn): HelpChoice {
     dueDate: bill.dueDate,
     transactionId: txn.id,
   };
+}
+
+export function withoutPrompt<T extends { id: string }>(prompts: T[], promptId: string): T[] {
+  return prompts.filter((prompt) => prompt.id !== promptId);
+}
+
+export function restorePrompt<T extends { id: string }>(prompts: T[], prompt: T): T[] {
+  if (prompts.some((item) => item.id === prompt.id)) return prompts;
+  return [prompt, ...prompts];
+}
+
+/** The writes for one tap. A full reconcile is not part of this step. */
+export function resolveChoiceWork(prompt: HelpPrompt, choiceId: string):
+  | { action: "assign"; commitmentId: string; instanceId: string; transactionId: string }
+  | { action: "skip"; instanceId: string }
+  | { action: "dismiss" } {
+  const choice = prompt.choices.find((item) => item.id === choiceId);
+  if (!choice) throw new Error("Choice not found");
+  if (choice.action === "assign") {
+    if (!choice.transactionId || !choice.instanceId || !choice.commitmentId) throw new Error("Choice is incomplete");
+    return {
+      action: "assign",
+      commitmentId: choice.commitmentId,
+      instanceId: choice.instanceId,
+      transactionId: choice.transactionId,
+    };
+  }
+  if (prompt.reason === "unmatched_past") {
+    const instanceId = choice.instanceId || prompt.instanceId;
+    if (instanceId) return { action: "skip", instanceId };
+  }
+  return { action: "dismiss" };
 }
 
 export function planReconciliation(input: {

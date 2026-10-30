@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { listReconcilePromptDocs } from "@/lib/repositories/firestore";
 import { reconcileOpenBills, resolveReconcileChoice } from "@/lib/upkeep";
@@ -17,7 +17,15 @@ async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) 
       if (!body.promptId || !body.choiceId) {
         return NextResponse.json({ error: "promptId and choiceId required" }, { status: 400 });
       }
-      return NextResponse.json(await resolveReconcileChoice(user.uid, body.promptId, body.choiceId));
+      const result = await resolveReconcileChoice(user.uid, body.promptId, body.choiceId);
+      after(async () => {
+        try {
+          await reconcileOpenBills(user.uid);
+        } catch (err) {
+          console.error("Background reconcile failed:", err instanceof Error ? err.message : "unknown error");
+        }
+      });
+      return NextResponse.json(result);
     }
     if (action !== "run") return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     return NextResponse.json(await reconcileOpenBills(user.uid));

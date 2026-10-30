@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { format } from "date-fns";
 import { getFirebaseAdminFirestore } from "@/lib/firebase-admin";
 import { planFutureDueDateEdit } from "@/lib/instance-edit";
-import type { HelpPrompt } from "@/lib/reconcile";
+import { learnBankTag, normalizeBankTags, type HelpPrompt } from "@/lib/reconcile";
 import { normalizeRecurrenceCount, normalizeRecurrenceEnd } from "@/lib/schedule";
 import {
   Account,
@@ -88,6 +88,7 @@ function normalizeCommitment(id: string, data: FirebaseFirestore.DocumentData): 
     recurrence_rule: (data.recurrence_rule ?? data.recurrenceRule ?? null) as string | null,
     recurrence_end_date: normalizeRecurrenceEnd(data.recurrence_end_date ?? data.recurrenceEndDate ?? null),
     recurrence_count: normalizeRecurrenceCount(data.recurrence_count ?? data.recurrenceCount ?? null),
+    bank_match_tags: normalizeBankTags(data.bank_match_tags ?? data.bankMatchTags ?? null),
     priority: (data.priority ?? "normal") as Commitment["priority"],
     autopay: isTruthyNumber(data.autopay),
     account_id: (data.account_id ?? data.accountId ?? null) as string | null,
@@ -271,6 +272,8 @@ export async function createCommitment(userId: string, body: Partial<Commitment>
     recurrenceEndDate: normalizeRecurrenceEnd(body.recurrence_end_date),
     recurrence_count: normalizeRecurrenceCount(body.recurrence_count),
     recurrenceCount: normalizeRecurrenceCount(body.recurrence_count),
+    bank_match_tags: normalizeBankTags(body.bank_match_tags ?? (body as { bank_match_tag?: unknown }).bank_match_tag),
+    bankMatchTags: normalizeBankTags(body.bank_match_tags ?? (body as { bank_match_tag?: unknown }).bank_match_tag),
     priority: body.priority || "normal",
     autopay: body.autopay ? 1 : 0,
     account_id: body.account_id || null,
@@ -283,8 +286,8 @@ export async function createCommitment(userId: string, body: Partial<Commitment>
   return getCommitment(userId, id);
 }
 
-export async function updateCommitment(userId: string, body: Partial<Commitment> & { id: string }) {
-  const limits: Record<string, string | number | null> = {};
+export async function updateCommitment(userId: string, body: Partial<Commitment> & { id: string; bank_match_tag?: unknown }) {
+  const limits: Record<string, string | number | string[] | null> = {};
   if ("recurrence_end_date" in body) {
     const end = normalizeRecurrenceEnd(body.recurrence_end_date);
     limits.recurrence_end_date = end;
@@ -294,6 +297,11 @@ export async function updateCommitment(userId: string, body: Partial<Commitment>
     const count = normalizeRecurrenceCount(body.recurrence_count);
     limits.recurrence_count = count;
     limits.recurrenceCount = count;
+  }
+  if ("bank_match_tags" in body || "bank_match_tag" in body) {
+    const tags = normalizeBankTags(body.bank_match_tags ?? body.bank_match_tag);
+    limits.bank_match_tags = tags;
+    limits.bankMatchTags = tags;
   }
   await collection(userId, COLLECTIONS.commitments).doc(body.id).set(
     {
@@ -316,6 +324,20 @@ export async function updateCommitment(userId: string, body: Partial<Commitment>
     { merge: true }
   );
   return getCommitment(userId, body.id);
+}
+
+/** Remember a merchant string on a bill without changing its display name or other tags. */
+export async function addBankMatchTag(userId: string, commitmentId: string, merchantName: string) {
+  const commitment = await getCommitment(userId, commitmentId);
+  if (!commitment) return null;
+  const next = learnBankTag(commitment.bank_match_tags, merchantName);
+  const current = commitment.bank_match_tags ?? [];
+  if (next.length === current.length && next.every((tag, index) => tag === current[index])) return commitment;
+  await collection(userId, COLLECTIONS.commitments).doc(commitmentId).set(
+    { ...stampUpdate(), bank_match_tags: next, bankMatchTags: next },
+    { merge: true }
+  );
+  return getCommitment(userId, commitmentId);
 }
 
 export async function deleteCommitment(userId: string, id: string) {
@@ -575,20 +597,33 @@ export async function closeInstanceAsPaid(
   return { alreadySettled: false };
 }
 
+function normalizeReconcilePrompt(id: string, data: FirebaseFirestore.DocumentData): HelpPrompt & { status: string } {
+  return {
+    id,
+    reason: data.reason === "ambiguous" ? "ambiguous" : "unmatched_past",
+    title: String(data.title ?? ""),
+    detail: String(data.detail ?? ""),
+    instanceId: (data.instance_id ?? data.instanceId ?? undefined) as string | undefined,
+    choices: Array.isArray(data.choices) ? data.choices : [],
+    status: String(data.status ?? "open"),
+  };
+}
+
+export async function getReconcilePrompt(userId: string, id: string) {
+  const snap = await collection(userId, COLLECTIONS.reconcilePrompts).doc(id).get();
+  if (!snap.exists) return null;
+  return normalizeReconcilePrompt(snap.id, snap.data()!);
+}
+
+export async function getLedgerEntry(userId: string, id: string) {
+  const snap = await collection(userId, COLLECTIONS.ledger).doc(id).get();
+  if (!snap.exists) return null;
+  return normalizeLedger(snap.id, snap.data()!);
+}
+
 export async function listReconcilePromptDocs(userId: string): Promise<(HelpPrompt & { status: string })[]> {
   const snap = await collection(userId, COLLECTIONS.reconcilePrompts).get();
-  return snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      reason: data.reason === "ambiguous" ? "ambiguous" : "unmatched_past",
-      title: String(data.title ?? ""),
-      detail: String(data.detail ?? ""),
-      instanceId: (data.instance_id ?? data.instanceId ?? undefined) as string | undefined,
-      choices: Array.isArray(data.choices) ? data.choices : [],
-      status: String(data.status ?? "open"),
-    };
-  });
+  return snap.docs.map((doc) => normalizeReconcilePrompt(doc.id, doc.data()));
 }
 
 export async function saveReconcilePrompt(userId: string, prompt: HelpPrompt, status: "open" | "dismissed" | "resolved") {

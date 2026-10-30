@@ -21,6 +21,8 @@ export interface Commitment {
   recurrence_end_date?: string | null;
   /** Total occurrences from the anchor, including the first. Null means no limit. */
   recurrence_count?: number | null;
+  /** Bank-statement text used to match this bill, in addition to its display name. */
+  bank_match_tags?: string[];
   priority: "critical" | "normal" | "flexible";
   autopay: number;
   account_id: string | null;
