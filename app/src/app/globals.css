@@ -63,6 +63,14 @@ textarea,
 
 html {
   background: var(--bg);
+  scroll-padding-top: calc(var(--header-height) + 0.5rem);
+  scroll-padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 0.75rem);
+}
+
+@media (min-width: 768px) {
+  html {
+    scroll-padding-bottom: 1rem;
+  }
 }
 
 body {
@@ -254,8 +262,9 @@ h3 {
   grid-template-columns: repeat(5, 1fr);
   min-height: var(--tabbar-height);
   padding: 0.25rem 0.25rem var(--safe-bottom);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(18px);
+  /* Solid, not blurred. A translucent bar let the match buttons show through
+     while the bar itself took the tap, so the choices looked dead. */
+  background: var(--surface);
   border-top: 1px solid var(--line);
 }
 

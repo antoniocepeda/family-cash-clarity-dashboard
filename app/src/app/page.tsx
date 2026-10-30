@@ -29,6 +29,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
   const [projectionDays, setProjectionDays] = useState<14 | 30 | 60 | 90 | 120 | 150 | 180>(30);
   const [includePending, setIncludePending] = useState(true);
 
@@ -136,14 +138,26 @@ export default function Dashboard() {
   };
 
   const handleResolvePrompt = async (promptId: string, choiceId: string) => {
-    const res = await authFetch("/api/reconcile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resolve", promptId, choiceId }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (Array.isArray(body.prompts)) setPrompts(body.prompts);
-    fetchAll();
+    setResolveError(null);
+    setResolvingId(promptId);
+    try {
+      const res = await authFetch("/api/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resolve", promptId, choiceId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResolveError(typeof body.error === "string" ? body.error : "Could not update that match");
+        return;
+      }
+      if (Array.isArray(body.prompts)) setPrompts(body.prompts);
+      await fetchAll();
+    } catch (err) {
+      setResolveError(err instanceof Error ? err.message : "Could not update that match");
+    } finally {
+      setResolvingId(null);
+    }
   };
 
   const handleAddCommitment = async (data: {
@@ -218,6 +232,8 @@ export default function Dashboard() {
           prompts={prompts}
           lastSyncedAt={lastSyncedAt}
           syncing={syncing}
+          resolvingId={resolvingId}
+          resolveError={resolveError}
           onResolve={user ? handleResolvePrompt : undefined}
         />
 
