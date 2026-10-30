@@ -90,7 +90,8 @@ export default function ClarityHome({
         : `Bills fit through ${format(parseISO(outlook.paychecks[outlook.paychecks.length - 1].date), "MMM d")}, and cash is ${outlook.trend === "down" ? "lower" : "about the same"} than at the first paycheck.`;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 lg:space-y-4">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 lg:gap-4">
       <section className="surface px-5 py-6 sm:px-7 sm:py-8">
         <div className="flex items-start justify-between gap-3">
           <p className="eyebrow">Can I spend today?</p>
@@ -142,6 +143,7 @@ export default function ClarityHome({
           </ul>
         )}
       </section>
+      </div>
 
       <section className="surface px-5 py-5 sm:px-7">
         <div className="flex items-start justify-between gap-3">
@@ -160,7 +162,7 @@ export default function ClarityHome({
         </div>
         <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{outlookDetail}</p>
         {outlook.paychecks.length > 0 && (
-          <ul className="mt-4 space-y-2">
+          <ul className="mt-4 space-y-2 lg:grid lg:grid-cols-3 lg:gap-3 lg:space-y-0">
             {outlook.paychecks.map((paycheck, index) => (
               <li key={`${paycheck.date}-${paycheck.name}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface-2)] px-3 py-3">
                 <div>

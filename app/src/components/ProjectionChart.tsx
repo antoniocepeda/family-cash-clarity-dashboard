@@ -139,7 +139,8 @@ export default function ProjectionChart({
           </div>
         )}
       </div>
-      <ResponsiveContainer width="100%" className="flex-1" height="100%" minHeight={280}>
+      <div className="h-[280px] w-full lg:h-[400px]">
+      <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
           <defs>
             <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
@@ -215,6 +216,7 @@ export default function ProjectionChart({
           />
         </AreaChart>
       </ResponsiveContainer>
+      </div>
       <div className="flex items-center gap-4 mt-3 text-xs text-[var(--muted)]">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-px w-4 bg-[var(--negative)]" /> $0 line

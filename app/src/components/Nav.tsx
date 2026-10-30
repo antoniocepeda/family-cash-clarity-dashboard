@@ -20,7 +20,7 @@ export default function Nav() {
 
   return (
     <header className="topbar">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+      <div className="shell flex items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-6">
           <Link href="/" className="shrink-0">
             <p className="eyebrow">Cash</p>
@@ -34,7 +34,7 @@ export default function Nav() {
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-full px-3 py-2 text-sm transition-colors ${
+                  className={`rounded-full px-3 py-2 text-sm transition-colors lg:px-4 lg:text-base ${
                     active
                       ? "text-[var(--text)]"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
