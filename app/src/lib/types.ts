@@ -23,6 +23,8 @@ export interface Commitment {
   recurrence_count?: number | null;
   /** Bank-statement text used to match this bill, in addition to its display name. */
   bank_match_tags?: string[];
+  /** App account id, Plaid id, or card mask this subscription is paid from. */
+  account_hint?: string | null;
   priority: "critical" | "normal" | "flexible";
   autopay: number;
   account_id: string | null;

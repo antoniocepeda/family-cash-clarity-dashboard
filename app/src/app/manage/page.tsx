@@ -5,7 +5,7 @@ import { usePlaidLink } from "react-plaid-link";
 import Nav from "@/components/Nav";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { Account, Commitment, PlaidStatus } from "@/lib/types";
+import { Account, Commitment, PlaidAccount, PlaidStatus } from "@/lib/types";
 
 type Tab = "accounts" | "commitments" | "help";
 
@@ -81,7 +81,7 @@ export default function ManagePage() {
           <AccountsManager accounts={accounts} plaidStatus={plaidStatus} onRefresh={fetchData} />
         )}
         {tab === "commitments" && (
-          <CommitmentsManager commitments={commitments} accounts={accounts} onRefresh={fetchData} />
+          <CommitmentsManager commitments={commitments} accounts={accounts} plaidAccounts={plaidStatus.accounts} onRefresh={fetchData} />
         )}
         {tab === "help" && <HelpGuide onRefresh={fetchData} />}
       </main>
@@ -382,10 +382,12 @@ function AccountsManager({
 function CommitmentsManager({
   commitments,
   accounts,
+  plaidAccounts,
   onRefresh,
 }: {
   commitments: Commitment[];
   accounts: Account[];
+  plaidAccounts: PlaidAccount[];
   onRefresh: () => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -396,6 +398,7 @@ function CommitmentsManager({
   const [editCustomValue, setEditCustomValue] = useState("");
   const [editCustomUnit, setEditCustomUnit] = useState<"days" | "weeks">("days");
   const [bankTagDraft, setBankTagDraft] = useState("");
+  const [accountHintDraft, setAccountHintDraft] = useState("");
   const [newCmt, setNewCmt] = useState({
     name: "",
     type: "bill" as string,
@@ -405,8 +408,19 @@ function CommitmentsManager({
     recurrence_end_date: "",
     recurrence_count: "",
     bank_statement_name: "",
+    account_hint: "",
     account_id: "",
   });
+
+  const maskFor = (accountId: string) => plaidAccounts.find((account) => account.app_account_id === accountId)?.mask;
+  const accountLabel = (account: Account) => {
+    const mask = maskFor(account.id);
+    return mask ? `${account.name} ··${mask}` : account.name;
+  };
+  const hintLabel = (hint: string) => {
+    const account = accounts.find((item) => item.id === hint);
+    return account ? accountLabel(account) : hint;
+  };
 
   const isCustomRule = (rule: string | null | undefined) =>
     rule?.startsWith("every_") && (rule?.endsWith("_days") || rule?.endsWith("_weeks"));
@@ -431,6 +445,7 @@ function CommitmentsManager({
     setEditing(cmt.id);
     setForm({ ...cmt });
     setBankTagDraft((cmt.bank_match_tags ?? []).join(", "));
+    setAccountHintDraft(cmt.account_hint ?? "");
     if (isCustomRule(cmt.recurrence_rule)) {
       const parsed = parseCustom(cmt.recurrence_rule!);
       setEditCustomValue(parsed.value);
@@ -449,7 +464,7 @@ function CommitmentsManager({
     await authFetch("/api/commitments", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, recurrence_rule: effectiveRule, bank_match_tags: bankTagDraft }),
+      body: JSON.stringify({ ...form, recurrence_rule: effectiveRule, bank_match_tags: bankTagDraft, account_hint: accountHintDraft }),
     });
     setEditing(null);
     onRefresh();
@@ -474,13 +489,14 @@ function CommitmentsManager({
         recurrence_end_date: newCmt.recurrence_end_date || null,
         recurrence_count: newCmt.recurrence_count ? Number(newCmt.recurrence_count) : null,
         bank_match_tags: newCmt.bank_statement_name,
+        account_hint: newCmt.account_hint,
         amount: parseFloat(newCmt.amount) || 0,
       }),
     });
     setAdding(false);
     setCustomValue("");
     setCustomUnit("days");
-    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", bank_statement_name: "", account_id: "" });
+    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", bank_statement_name: "", account_hint: "", account_id: "" });
     onRefresh();
   };
 
@@ -543,6 +559,21 @@ function CommitmentsManager({
               className="mt-1 min-h-11 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
             />
             <span className="mt-1 block font-normal text-[var(--muted)]">Optional. Comma-separated names as they appear on the bank statement.</span>
+          </label>
+          <label className="block text-xs font-medium text-[var(--text-secondary)]">
+            Card or account
+            <select
+              value={newCmt.account_hint}
+              onChange={(e) => setNewCmt({ ...newCmt, account_hint: e.target.value })}
+              aria-label="Card or account"
+              className="mt-1 min-h-11 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            >
+              <option value="">Any account</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+              ))}
+            </select>
+            <span className="mt-1 block font-normal text-[var(--muted)]">Optional. Tie this bill to one card when you have two of the same subscription.</span>
           </label>
           {newCmt.recurrence_rule === "custom" && (
             <div>
@@ -625,6 +656,23 @@ function CommitmentsManager({
                           className="mt-1 min-h-11 w-full rounded border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
                         />
                       </label>
+                      <label className="mt-3 block text-xs font-medium text-[var(--text-secondary)]">
+                        Card or account
+                        <select
+                          value={accountHintDraft}
+                          onChange={(e) => setAccountHintDraft(e.target.value)}
+                          aria-label="Card or account"
+                          className="mt-1 min-h-11 w-full rounded border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                        >
+                          <option value="">Any account</option>
+                          {accountHintDraft && !accounts.some((account) => account.id === accountHintDraft) && (
+                            <option value={accountHintDraft}>{accountHintDraft}</option>
+                          )}
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+                          ))}
+                        </select>
+                      </label>
                     </td>
                   </tr>
                   </Fragment>
@@ -638,6 +686,9 @@ function CommitmentsManager({
                       </div>
                       {(cmt.bank_match_tags ?? []).length > 0 && (
                         <p className="mt-1 text-[11px] text-[var(--muted)]">Statement: {cmt.bank_match_tags?.join(", ")}</p>
+                      )}
+                      {cmt.account_hint && (
+                        <p className="mt-1 text-[11px] text-[var(--muted)]">Card: {hintLabel(cmt.account_hint)}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 capitalize text-[var(--text-secondary)]" data-label="Type">{cmt.type}</td>

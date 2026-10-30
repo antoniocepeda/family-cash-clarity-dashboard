@@ -84,6 +84,86 @@ test("learning a match keeps existing tags and ignores payment noise", () => {
   assert.deepEqual(learnBankTag(undefined, "COMCAST *CABLE"), ["COMCAST CABLE"]);
 });
 
+function chatGpt(instanceId: string, commitmentId: string, dueDate: string, accountHint?: string): OpenBill {
+  return bill({
+    instanceId,
+    commitmentId,
+    name: "ChatGPT",
+    dueDate,
+    plannedAmount: 20,
+    bankMatchTags: ["ChatGPT"],
+    accountHint,
+  });
+}
+
+test("two identical subscriptions a couple of weeks apart match the nearer charge", () => {
+  const bills = [
+    chatGpt("gpt-a_2026-11-01", "gpt-a", "2026-11-01"),
+    chatGpt("gpt-b_2026-11-15", "gpt-b", "2026-11-15"),
+    chatGpt("gpt-a_2026-12-01", "gpt-a", "2026-12-01"),
+    chatGpt("gpt-b_2026-12-15", "gpt-b", "2026-12-15"),
+  ];
+  const plan = planReconciliation({
+    today: "2026-12-20",
+    dismissedPromptIds: [],
+    bills,
+    transactions: [
+      txn({ id: "nov-a", name: "OPENAI *CHATGPT", amount: 20, date: "2026-11-06" }),
+      txn({ id: "nov-b", name: "OPENAI *CHATGPT", amount: 20, date: "2026-11-16" }),
+      txn({ id: "dec-a", name: "OPENAI *CHATGPT", amount: 20, date: "2026-12-06" }),
+      txn({ id: "dec-b", name: "OPENAI *CHATGPT", amount: 20, date: "2026-12-16" }),
+    ],
+  });
+
+  assert.equal(plan.prompts.length, 0);
+  const pairs = Object.fromEntries(plan.matches.map((match) => [match.transactionId, match.instanceId]));
+  assert.deepEqual(pairs, {
+    "nov-a": "gpt-a_2026-11-01",
+    "nov-b": "gpt-b_2026-11-15",
+    "dec-a": "gpt-a_2026-12-01",
+    "dec-b": "gpt-b_2026-12-15",
+  });
+});
+
+test("charges whose due dates are too close still ask which bill", () => {
+  const plan = planReconciliation({
+    today: "2026-11-10",
+    dismissedPromptIds: [],
+    bills: [
+      chatGpt("gpt-a_2026-11-01", "gpt-a", "2026-11-01"),
+      chatGpt("gpt-b_2026-11-08", "gpt-b", "2026-11-08"),
+    ],
+    transactions: [txn({ id: "mid", name: "OPENAI *CHATGPT", amount: 20, date: "2026-11-04" })],
+  });
+
+  assert.equal(plan.matches.length, 0);
+  assert.equal(plan.prompts.length, 1);
+  assert.equal(plan.prompts[0].reason, "ambiguous");
+  assert.equal(plan.prompts[0].choices.filter((choice) => choice.action === "assign").length, 2);
+});
+
+test("an account hint picks the card when the dates are too close to call", () => {
+  const plan = planReconciliation({
+    today: "2026-11-10",
+    dismissedPromptIds: [],
+    bills: [
+      chatGpt("gpt-a_2026-11-01", "gpt-a", "2026-11-01", "card-a"),
+      chatGpt("gpt-b_2026-11-08", "gpt-b", "2026-11-08", "card-b"),
+    ],
+    transactions: [
+      txn({ id: "on-a", name: "OPENAI *CHATGPT", amount: 20, date: "2026-11-04", accountId: "card-a" }),
+      txn({ id: "on-b", name: "OPENAI *CHATGPT", amount: 20, date: "2026-11-05", accountId: "card-b", accountMask: "4242" }),
+    ],
+  });
+
+  assert.equal(plan.prompts.length, 0);
+  const pairs = Object.fromEntries(plan.matches.map((match) => [match.transactionId, match.instanceId]));
+  assert.deepEqual(pairs, {
+    "on-a": "gpt-a_2026-11-01",
+    "on-b": "gpt-b_2026-11-08",
+  });
+});
+
 test("a tap drops that prompt immediately and can put it back", () => {
   const prompts = [
     { id: "ambiguous:txn-1", title: "Which bill?" },
