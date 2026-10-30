@@ -4,6 +4,7 @@ import { format, startOfDay } from "date-fns";
 import { materializeRollingInstances } from "@/lib/instances";
 import { planReconciliation, type BankTxn, type HelpChoice, type OpenBill } from "@/lib/reconcile";
 import {
+  addBankMatchTag,
   closeInstanceAsPaid,
   listCommitments,
   listInstances,
@@ -33,6 +34,7 @@ export async function reconcileOpenBills(userId: string) {
       commitmentId: instance.commitment_id,
       instanceId: instance.id,
       name: instance.name_override || commitment?.name || instance.commitment_name || "Bill",
+      bankMatchTags: commitment?.bank_match_tags ?? [],
       dueDate: instance.due_date,
       plannedAmount: instance.planned_amount,
       status: instance.status,
@@ -96,6 +98,7 @@ export async function resolveReconcileChoice(userId: string, promptId: string, c
       commitmentId: choice.commitmentId,
       actualAmount: txn.amount,
     });
+    await addBankMatchTag(userId, choice.commitmentId, txn.description);
   } else if (prompt.reason === "unmatched_past") {
     const instanceId = choice.instanceId || prompt.instanceId;
     if (instanceId) await skipInstance(userId, instanceId);

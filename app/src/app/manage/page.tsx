@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import Nav from "@/components/Nav";
 import { readJsonArray } from "@/lib/api-client";
@@ -395,6 +395,7 @@ function CommitmentsManager({
   const [customUnit, setCustomUnit] = useState<"days" | "weeks">("days");
   const [editCustomValue, setEditCustomValue] = useState("");
   const [editCustomUnit, setEditCustomUnit] = useState<"days" | "weeks">("days");
+  const [bankTagDraft, setBankTagDraft] = useState("");
   const [newCmt, setNewCmt] = useState({
     name: "",
     type: "bill" as string,
@@ -403,6 +404,7 @@ function CommitmentsManager({
     recurrence_rule: "",
     recurrence_end_date: "",
     recurrence_count: "",
+    bank_statement_name: "",
     account_id: "",
   });
 
@@ -428,6 +430,7 @@ function CommitmentsManager({
   const startEdit = (cmt: Commitment) => {
     setEditing(cmt.id);
     setForm({ ...cmt });
+    setBankTagDraft((cmt.bank_match_tags ?? []).join(", "));
     if (isCustomRule(cmt.recurrence_rule)) {
       const parsed = parseCustom(cmt.recurrence_rule!);
       setEditCustomValue(parsed.value);
@@ -446,7 +449,7 @@ function CommitmentsManager({
     await authFetch("/api/commitments", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, recurrence_rule: effectiveRule }),
+      body: JSON.stringify({ ...form, recurrence_rule: effectiveRule, bank_match_tags: bankTagDraft }),
     });
     setEditing(null);
     onRefresh();
@@ -470,13 +473,14 @@ function CommitmentsManager({
         recurrence_rule: effectiveRule,
         recurrence_end_date: newCmt.recurrence_end_date || null,
         recurrence_count: newCmt.recurrence_count ? Number(newCmt.recurrence_count) : null,
+        bank_match_tags: newCmt.bank_statement_name,
         amount: parseFloat(newCmt.amount) || 0,
       }),
     });
     setAdding(false);
     setCustomValue("");
     setCustomUnit("days");
-    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", account_id: "" });
+    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", bank_statement_name: "", account_id: "" });
     onRefresh();
   };
 
@@ -529,6 +533,17 @@ function CommitmentsManager({
               </label>
             </div>
           )}
+          <label className="block text-xs font-medium text-[var(--text-secondary)]">
+            Bank statement name
+            <input
+              value={newCmt.bank_statement_name}
+              onChange={(e) => setNewCmt({ ...newCmt, bank_statement_name: e.target.value })}
+              placeholder="Xfinity, COMCAST"
+              aria-label="Bank statement name"
+              className="mt-1 min-h-11 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            />
+            <span className="mt-1 block font-normal text-[var(--muted)]">Optional. Comma-separated names as they appear on the bank statement.</span>
+          </label>
           {newCmt.recurrence_rule === "custom" && (
             <div>
               <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Every how many?</label>
@@ -565,7 +580,8 @@ function CommitmentsManager({
             <tbody className="divide-y divide-[var(--line)]">
               {sorted.map((cmt) =>
                 editing === cmt.id ? (
-                  <tr key={cmt.id} className="bg-[var(--warning-soft)]">
+                  <Fragment key={cmt.id}>
+                  <tr className="bg-[var(--warning-soft)]">
                     <td className="px-4 py-2"><input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" /></td>
                     <td className="px-4 py-2"><select value={form.type || "bill"} onChange={(e) => setForm({ ...form, type: e.target.value as "income" | "bill" })} className="rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"><option value="bill">Bill</option><option value="income">Income</option></select></td>
                     <td className="px-4 py-2"><input type="number" value={form.amount ?? 0} onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) })} step="0.01" className="w-24 rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" /></td>
@@ -597,6 +613,21 @@ function CommitmentsManager({
                       </div>
                     </td>
                   </tr>
+                  <tr className="bg-[var(--warning-soft)]">
+                    <td colSpan={6} className="px-4 py-2">
+                      <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                        Bank statement name
+                        <input
+                          value={bankTagDraft}
+                          onChange={(e) => setBankTagDraft(e.target.value)}
+                          placeholder="Xfinity, COMCAST"
+                          aria-label="Bank statement name"
+                          className="mt-1 min-h-11 w-full rounded border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                        />
+                      </label>
+                    </td>
+                  </tr>
+                  </Fragment>
                 ) : (
                   <tr key={cmt.id} className={`hover:bg-[var(--surface-3)] transition-colors ${cmt.paid ? "opacity-50" : ""}`}>
                     <td className="px-4 py-3" data-label="">
@@ -605,6 +636,9 @@ function CommitmentsManager({
                         <span className="font-medium text-[var(--text)]">{cmt.name}</span>
                         {cmt.paid === 1 && (<span className="text-[10px] font-medium bg-[var(--surface-3)] text-[var(--muted)] px-1.5 py-0.5 rounded">PAID</span>)}
                       </div>
+                      {(cmt.bank_match_tags ?? []).length > 0 && (
+                        <p className="mt-1 text-[11px] text-[var(--muted)]">Statement: {cmt.bank_match_tags?.join(", ")}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3 capitalize text-[var(--text-secondary)]" data-label="Type">{cmt.type}</td>
                     <td className="px-4 py-3 font-semibold tabular-nums text-[var(--text)]" data-label="Amount">{cmt.type === "income" ? "+" : "−"}${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
