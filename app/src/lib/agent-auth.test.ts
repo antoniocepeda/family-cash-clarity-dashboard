@@ -4,6 +4,7 @@ import {
   agentKeysMatch,
   buildRequestAuditSummary,
   decideAgentCredential,
+  decideSchedulerAccess,
   isPublicReadEnabled,
   summarizeForAudit,
 } from "./agent-auth";
@@ -79,6 +80,54 @@ test("a wrong non-JWT bearer is rejected and a JWT falls through to Firebase", (
       configuredKey: KEY,
     }),
     "absent"
+  );
+});
+
+test("scheduler access accepts the cron secret or the agent key", () => {
+  assert.equal(
+    decideSchedulerAccess({
+      cronKeyHeader: "cron-secret",
+      authorizationHeader: null,
+      configuredCronSecret: "cron-secret",
+      agentDecision: "absent",
+    }),
+    true
+  );
+  assert.equal(
+    decideSchedulerAccess({
+      cronKeyHeader: null,
+      authorizationHeader: "Bearer cron-secret",
+      configuredCronSecret: "cron-secret",
+      agentDecision: "reject",
+    }),
+    true
+  );
+  assert.equal(
+    decideSchedulerAccess({
+      cronKeyHeader: "wrong",
+      authorizationHeader: null,
+      configuredCronSecret: "cron-secret",
+      agentDecision: "match",
+    }),
+    true
+  );
+  assert.equal(
+    decideSchedulerAccess({
+      cronKeyHeader: "wrong",
+      authorizationHeader: null,
+      configuredCronSecret: "cron-secret",
+      agentDecision: "absent",
+    }),
+    false
+  );
+  assert.equal(
+    decideSchedulerAccess({
+      cronKeyHeader: null,
+      authorizationHeader: null,
+      configuredCronSecret: null,
+      agentDecision: "match",
+    }),
+    true
   );
 });
 

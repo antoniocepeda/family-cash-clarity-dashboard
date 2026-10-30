@@ -1,5 +1,5 @@
-import { addDays, format, parseISO, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
-import { advanceByRule } from "./instances";
+import { addDays, format, parseISO, isBefore, isEqual, startOfDay } from "date-fns";
+import { expandOccurrenceDates } from "./schedule";
 import { listAccounts, listCommitments, listInstances, listLedger } from "./repositories/firestore";
 
 interface CommitmentRow {
@@ -9,6 +9,8 @@ interface CommitmentRow {
   amount: number;
   due_date: string;
   recurrence_rule: string | null;
+  recurrence_end_date?: string | null;
+  recurrence_count?: number | null;
   priority: string;
   autopay: number;
   account_id: string | null;
@@ -37,32 +39,16 @@ function isSettledStatus(status?: string) {
 }
 
 export function expandRecurrence(commitment: CommitmentRow, startDate: Date, endDate: Date): Date[] {
-  const dates: Date[] = [];
-  const rule = commitment.recurrence_rule;
-  const baseDate = startOfDay(parseISO(commitment.due_date));
-
-  if (!rule) {
-    if (
-      (isAfter(baseDate, startDate) || isEqual(baseDate, startDate)) &&
-      (isBefore(baseDate, endDate) || isEqual(baseDate, endDate))
-    ) {
-      dates.push(baseDate);
-    }
-    return dates;
-  }
-
-  let cursor = baseDate;
-
-  while (isBefore(cursor, startDate)) {
-    cursor = advanceByRule(cursor, rule);
-  }
-
-  while (isBefore(cursor, endDate) || isEqual(cursor, endDate)) {
-    dates.push(cursor);
-    cursor = advanceByRule(cursor, rule);
-  }
-
-  return dates;
+  return expandOccurrenceDates(
+    {
+      due_date: commitment.due_date,
+      recurrence_rule: commitment.recurrence_rule,
+      recurrence_end_date: commitment.recurrence_end_date,
+      recurrence_count: commitment.recurrence_count,
+    },
+    startDate,
+    endDate
+  );
 }
 
 export async function generateProjection(
@@ -138,6 +124,8 @@ export async function generateProjection(
       }
 
       const impact = commitment.type === "income" ? effectiveAmount : -effectiveAmount;
+      const todayStr = format(today, "yyyy-MM-dd");
+      const pastDue = originalDueDate < todayStr;
       day.commitments.push({
         commitment_id: commitment.id,
         name: (instance?.name_override || commitment.name) + (isSimulated ? " (simulated)" : ""),
@@ -146,7 +134,7 @@ export async function generateProjection(
         priority: commitment.priority,
         due_date: key,
         original_due_date: originalDueDate,
-        status: instance?.status ?? "planned",
+        status: pastDue || instance?.status === "overdue" ? "overdue" : instance?.status ?? "planned",
         paid_date: instance?.paid_date,
       });
 

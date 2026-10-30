@@ -204,29 +204,6 @@ function AccountsManager({
     }
   };
 
-  const syncBankData = async () => {
-    setPlaidBusy(true);
-    setPlaidError(null);
-    setPlaidMessage("Syncing bank data...");
-    try {
-      const res = await authFetch("/api/plaid/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok && res.status !== 207) throw new Error(data.error || "Bank sync failed");
-      if (data.errors?.length) {
-        setPlaidError(`Synced with ${data.errors.length} item error${data.errors.length === 1 ? "" : "s"}.`);
-      } else {
-        setPlaidMessage(
-          `Synced ${data.accounts} accounts, ${data.added} new transactions, ${data.modified} updates, ${data.removed} removals, ${data.pending ?? 0} pending.`
-        );
-      }
-      onRefresh();
-    } catch (err) {
-      setPlaidError(err instanceof Error ? err.message : "Bank sync failed");
-    } finally {
-      setPlaidBusy(false);
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -238,13 +215,6 @@ function AccountsManager({
             className="btn btn-primary"
           >
             Connect Bank
-          </button>
-          <button
-            onClick={syncBankData}
-            disabled={plaidBusy || plaidStatus.items.length === 0}
-            className="btn btn-ghost"
-          >
-            Sync Bank Data
           </button>
           <button
             onClick={() => setAdding(!adding)}
@@ -431,6 +401,8 @@ function CommitmentsManager({
     amount: "",
     due_date: new Date().toISOString().slice(0, 10),
     recurrence_rule: "",
+    recurrence_end_date: "",
+    recurrence_count: "",
     account_id: "",
   });
 
@@ -442,13 +414,15 @@ function CommitmentsManager({
     return { value: rule.slice(6, -5), unit: "days" };
   };
 
-  const formatRecurrence = (rule: string | null) => {
-    if (!rule) return "One-time";
-    if (isCustomRule(rule)) {
-      const { value, unit } = parseCustom(rule);
-      return `Every ${value} ${unit}`;
-    }
-    return rule;
+  const formatRecurrence = (rule: string | null, endDate?: string | null, count?: number | null) => {
+    const base = !rule
+      ? "One-time"
+      : isCustomRule(rule)
+        ? `Every ${parseCustom(rule).value} ${parseCustom(rule).unit}`
+        : rule;
+    if (endDate) return `${base} until ${endDate}`;
+    if (count) return `${base} × ${count}`;
+    return base;
   };
 
   const startEdit = (cmt: Commitment) => {
@@ -494,13 +468,15 @@ function CommitmentsManager({
       body: JSON.stringify({
         ...newCmt,
         recurrence_rule: effectiveRule,
+        recurrence_end_date: newCmt.recurrence_end_date || null,
+        recurrence_count: newCmt.recurrence_count ? Number(newCmt.recurrence_count) : null,
         amount: parseFloat(newCmt.amount) || 0,
       }),
     });
     setAdding(false);
     setCustomValue("");
     setCustomUnit("days");
-    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", account_id: "" });
+    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", account_id: "" });
     onRefresh();
   };
 
@@ -541,6 +517,18 @@ function CommitmentsManager({
               {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
             </select>
           </div>
+          {newCmt.recurrence_rule && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                End date (optional)
+                <input type="date" value={newCmt.recurrence_end_date} onChange={(e) => setNewCmt({ ...newCmt, recurrence_end_date: e.target.value })} className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+              </label>
+              <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                Stop after this many (optional)
+                <input type="number" min="1" step="1" value={newCmt.recurrence_count} onChange={(e) => setNewCmt({ ...newCmt, recurrence_count: e.target.value })} placeholder="Repeats until you stop it" className="mt-1 w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+              </label>
+            </div>
+          )}
           {newCmt.recurrence_rule === "custom" && (
             <div>
               <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Every how many?</label>
@@ -586,6 +574,12 @@ function CommitmentsManager({
                       <select value={isCustomRule(form.recurrence_rule) ? "custom" : (form.recurrence_rule || "")} onChange={(e) => { const v = e.target.value; setForm({ ...form, recurrence_rule: v === "custom" ? "custom" : (v || null) }); if (v !== "custom") { setEditCustomValue(""); setEditCustomUnit("days"); } }} className="rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]">
                         <option value="">One-time</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option><option value="custom">Custom</option>
                       </select>
+                      {form.recurrence_rule && (
+                        <div className="mt-1 space-y-1">
+                          <input type="date" aria-label="End date" value={form.recurrence_end_date || ""} onChange={(e) => setForm({ ...form, recurrence_end_date: e.target.value || null })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+                          <input type="number" min="1" step="1" aria-label="Stop after this many" placeholder="No limit" value={form.recurrence_count ?? ""} onChange={(e) => setForm({ ...form, recurrence_count: e.target.value ? Number(e.target.value) : null })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]" />
+                        </div>
+                      )}
                       {(form.recurrence_rule === "custom" || isCustomRule(form.recurrence_rule)) && (
                         <div className="flex gap-1 mt-1">
                           <input type="number" value={editCustomValue} onChange={(e) => setEditCustomValue(e.target.value)} placeholder="#" min="1" step="1" className="w-16 rounded border border-[var(--line-strong)] px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]" />
@@ -615,7 +609,7 @@ function CommitmentsManager({
                     <td className="px-4 py-3 capitalize text-[var(--text-secondary)]" data-label="Type">{cmt.type}</td>
                     <td className="px-4 py-3 font-semibold tabular-nums text-[var(--text)]" data-label="Amount">{cmt.type === "income" ? "+" : "−"}${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                     <td className="px-4 py-3 text-[var(--text-secondary)]" data-label="Due">{cmt.due_date}</td>
-                    <td className="px-4 py-3 capitalize text-[var(--muted)]" data-label="Repeats">{formatRecurrence(cmt.recurrence_rule)}</td>
+                    <td className="px-4 py-3 capitalize text-[var(--muted)]" data-label="Repeats">{formatRecurrence(cmt.recurrence_rule, cmt.recurrence_end_date, cmt.recurrence_count)}</td>
                     <td className="px-4 py-3 text-right" data-label="">
                       <div className="flex justify-end gap-2">
                         <button onClick={() => startEdit(cmt)} className="px-3 py-1 text-xs font-medium text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent-soft)] transition-colors">Edit</button>

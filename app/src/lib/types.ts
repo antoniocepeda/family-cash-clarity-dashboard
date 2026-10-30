@@ -17,6 +17,10 @@ export interface Commitment {
   actual_amount: number | null;
   due_date: string;
   recurrence_rule: string | null;
+  /** Last date that still occurs, inclusive. Null means the series does not end. */
+  recurrence_end_date?: string | null;
+  /** Total occurrences from the anchor, including the first. Null means no limit. */
+  recurrence_count?: number | null;
   priority: "critical" | "normal" | "flexible";
   autopay: number;
   account_id: string | null;

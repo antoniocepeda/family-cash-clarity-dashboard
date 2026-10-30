@@ -6,6 +6,7 @@ import {
   buildRequestAuditSummary,
   configuredAgentKey,
   decideAgentCredential,
+  decideSchedulerAccess,
   isPublicReadEnabled,
 } from "@/lib/agent-auth";
 import { getAuthorizedEmails, isAuthorizedEmail } from "@/lib/authorized-users";
@@ -228,6 +229,18 @@ async function executeAuthed<Context extends object>(
       { status: 500 }
     );
   }
+}
+
+/** Background sync. Accepts CRON_SECRET via X-Cron-Key or Bearer, or the household agent key. */
+export async function authorizeScheduler(req: NextRequest): Promise<DecodedIdToken | null> {
+  const allowed = decideSchedulerAccess({
+    cronKeyHeader: req.headers.get("x-cron-key"),
+    authorizationHeader: req.headers.get("authorization"),
+    configuredCronSecret: configuredAgentKey(process.env.CRON_SECRET),
+    agentDecision: readAgentCredential(req),
+  });
+  if (!allowed) return null;
+  return getHouseholdOwnerUser("agent-api-key");
 }
 
 export function withAuth<Context extends object = object>(

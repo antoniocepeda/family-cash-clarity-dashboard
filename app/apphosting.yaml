@@ -63,3 +63,10 @@ env:
       - RUNTIME
   # ALLOW_PUBLIC_READ is intentionally omitted. Unauthenticated reads stay
   # off unless this variable is set to the string "true".
+  # Optional. Create a Secret Manager secret named cronSecret before uncommenting.
+  # Cloud Scheduler can call POST /api/cron/sync with X-Cron-Key. Until then,
+  # the same route accepts the existing X-Agent-Key.
+  # - variable: CRON_SECRET
+  #   secret: cronSecret
+  #   availability:
+  #     - RUNTIME

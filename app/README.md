@@ -217,6 +217,51 @@ for the App Hosting backend and redeploy. Any other value, including omitting
 the variable, keeps anonymous reads disabled. Writes never use this flag.
 The browser UI does not use anonymous read; it sends the Firebase ID token.
 
+## Background bank sync
+
+Cash balances update without a sync button.
+
+- Opening the dashboard calls `POST /api/plaid/sync` when the newest linked bank is older than 15 minutes, then reconciles bills.
+- `POST /api/cron/sync` does the same on a schedule: Plaid sync, roll recurring instances forward (9 months, plus 120 days of past bills), and auto-match payments. It does not accept a normal Firebase login.
+
+Call it with the existing agent key, or with `CRON_SECRET` once that value is set on the App Hosting backend:
+
+```bash
+curl -sS -X POST \
+  -H "X-Agent-Key: $AGENT_API_KEY" \
+  "https://<backend>/api/cron/sync"
+```
+
+```bash
+curl -sS -X POST \
+  -H "X-Cron-Key: $CRON_SECRET" \
+  "https://<backend>/api/cron/sync"
+```
+
+`CRON_SECRET` is optional. Leave it unset to keep using `X-Agent-Key`. To add a separate scheduler secret, create it and uncomment the `CRON_SECRET` block in `apphosting.yaml`:
+
+```bash
+firebase apphosting:secrets:set cronSecret --project runway-5000
+firebase apphosting:secrets:grantaccess cronSecret --project runway-5000
+```
+
+Cloud Scheduler (every 30 minutes is enough; Plaid also rate-limits on-demand refresh):
+
+```bash
+gcloud scheduler jobs create http cash-clarity-sync \
+  --project runway-5000 \
+  --location us-central1 \
+  --schedule "*/30 * * * *" \
+  --uri "https://<backend>/api/cron/sync" \
+  --http-method POST \
+  --headers "X-Agent-Key=$AGENT_API_KEY" \
+  --time-zone "America/Chicago"
+```
+
+Use `X-Cron-Key` in that header instead once `CRON_SECRET` is deployed. The job should call the App Hosting URL, not a preview URL.
+
+Recurring bills keep repeating until `recurrence_end_date` or `recurrence_count` is set on the commitment. Instances are filled in on read and by the scheduled job, so the series does not stop at a fixed calendar date.
+
 ## Firestore Data
 
 The app stores data in Firestore using Firebase Admin from server-only API routes. Runtime filesystem storage is not used as the source of truth, so the app can run across Firebase App Hosting/Cloud Run instances.
@@ -234,6 +279,7 @@ users/{userId}/ledgerItems/{itemId}
 users/{userId}/plaidItems/{itemId}
 users/{userId}/plaidAccounts/{plaidAccountId}
 users/{userId}/plaidSync/{itemId}
+users/{userId}/reconcilePrompts/{promptId}
 users/{userId}/agentAudit/{auditId}
 ```
 

@@ -6,6 +6,7 @@ import CashCalendar from "@/components/CashCalendar";
 import UpcomingCommitments from "@/components/UpcomingCommitments";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
+import { MATERIALIZE_DAYS } from "@/lib/schedule";
 import { Account, CommitmentInstance, CommitmentWithInstances, ProjectionDay } from "@/lib/types";
 
 export default function ExpensesPage() {
@@ -27,7 +28,7 @@ export default function ExpensesPage() {
       ]);
       setAccounts(accts);
       setCommitments(cmts);
-      const projectionRes = await authFetch("/api/projections?days=42");
+      const projectionRes = await authFetch(`/api/projections?days=${MATERIALIZE_DAYS}`);
       setProjection(await readJsonArray<ProjectionDay>(projectionRes, "Projection fetch"));
     } catch (err) {
       console.error("Failed to fetch expenses:", err);
@@ -39,15 +40,6 @@ export default function ExpensesPage() {
   useEffect(() => {
     fetchCommitments();
   }, [fetchCommitments]);
-
-  const handleRollover = async (id: string, instanceDueDate: string) => {
-    await authFetch("/api/commitments/rollover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, instance_due_date: instanceDueDate }),
-    });
-    fetchCommitments();
-  };
 
   const handleAddCashEvent = async (expense: {
     name: string;
@@ -103,15 +95,6 @@ export default function ExpensesPage() {
     fetchCommitments();
   };
 
-  const handleLeftover = async (commitmentId: string, instanceDueDate: string, action: "rollover" | "release") => {
-    await authFetch("/api/commitments/leftover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commitment_id: commitmentId, instance_due_date: instanceDueDate, action }),
-    });
-    fetchCommitments();
-  };
-
   const handleSimulateToggle = (id: string) => {
     setSimulatedIds((prev) => {
       const next = new Set(prev);
@@ -154,10 +137,8 @@ export default function ExpensesPage() {
         />
         <UpcomingCommitments
           commitments={commitments}
-          onRollover={handleRollover}
           onEditInstanceAmount={handleEditInstanceAmount}
           onReceiveIncome={handleReceiveIncome}
-          onLeftover={handleLeftover}
           simulatedIds={simulatedIds}
           onSimulateToggle={handleSimulateToggle}
         />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import CashPositionStrip from "@/components/CashPositionStrip";
+import ClarityHome from "@/components/ClarityHome";
 import ProjectionChart from "@/components/ProjectionChart";
 import QuickActions from "@/components/QuickActions";
 import Nav from "@/components/Nav";
@@ -10,7 +10,14 @@ import AgentActivity from "@/components/AgentActivity";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerItemInput, ProjectionDay } from "@/lib/types";
+import { HelpPrompt } from "@/lib/reconcile";
+import { STALE_SYNC_MS } from "@/lib/schedule";
+import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerItemInput, PlaidItem, ProjectionDay } from "@/lib/types";
+
+function newestSync(items: { last_synced_at?: string | null }[]) {
+  const stamps = items.map((item) => item.last_synced_at).filter((value): value is string => Boolean(value)).sort();
+  return stamps.at(-1) ?? null;
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -18,8 +25,10 @@ export default function Dashboard() {
   const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [projection, setProjection] = useState<ProjectionDay[]>([]);
   const [trendProjection, setTrendProjection] = useState<ProjectionDay[]>([]);
+  const [prompts, setPrompts] = useState<HelpPrompt[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [projectionDays, setProjectionDays] = useState<14 | 30 | 60 | 90 | 120 | 150 | 180>(30);
   const [includePending, setIncludePending] = useState(true);
 
@@ -31,12 +40,49 @@ export default function Dashboard() {
     return readJsonArray<ProjectionDay>(res, "Projection fetch");
   }, [projectionDays, includePending]);
 
+  const refreshBankIfStale = useCallback(async () => {
+    const statusRes = await authFetch("/api/plaid/sync");
+    const status = await statusRes.json().catch(() => ({}));
+    if (!statusRes.ok) return null;
+    const items = Array.isArray(status.items) ? status.items as PlaidItem[] : [];
+    const last = newestSync(items);
+    const stale = items.length > 0 && (!last || Date.now() - new Date(last).getTime() > STALE_SYNC_MS);
+    if (!stale) return last;
+    setSyncing(true);
+    try {
+      const syncRes = await authFetch("/api/plaid/sync", { method: "POST" });
+      if (!syncRes.ok && syncRes.status !== 207) return last;
+      return new Date().toISOString();
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     try {
+      let syncedAt: string | null = null;
+      if (user) {
+        try {
+          syncedAt = await refreshBankIfStale();
+        } catch (err) {
+          console.error("Bank refresh failed:", err);
+        }
+        try {
+          const reconcileRes = await authFetch("/api/reconcile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "run" }),
+          });
+          const reconcile = await reconcileRes.json().catch(() => ({}));
+          setPrompts(Array.isArray(reconcile.prompts) ? reconcile.prompts : []);
+        } catch (err) {
+          console.error("Reconcile failed:", err);
+        }
+      }
       const [acctRes, proj, trendProj, cmtRes] = await Promise.all([
         authFetch("/api/accounts"),
         fetchProjection(),
-        fetchProjection(180),
+        fetchProjection(180, false),
         authFetch("/api/commitments"),
       ]);
       const [accts, cmts] = await Promise.all([
@@ -47,13 +93,13 @@ export default function Dashboard() {
       setCommitments(cmts);
       setProjection(proj);
       setTrendProjection(trendProj);
-      setLastUpdated(new Date().toISOString());
+      setLastSyncedAt(syncedAt);
     } catch (err) {
       console.error("Failed to fetch data:", err);
     } finally {
       setLoading(false);
     }
-  }, [fetchProjection]);
+  }, [fetchProjection, refreshBankIfStale, user]);
 
   useEffect(() => {
     if (!user) {
@@ -89,6 +135,17 @@ export default function Dashboard() {
     fetchAll();
   };
 
+  const handleResolvePrompt = async (promptId: string, choiceId: string) => {
+    const res = await authFetch("/api/reconcile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resolve", promptId, choiceId }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (Array.isArray(body.prompts)) setPrompts(body.prompts);
+    fetchAll();
+  };
+
   const handleAddCommitment = async (data: {
     name: string;
     type: string;
@@ -101,15 +158,6 @@ export default function Dashboard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
-    });
-    fetchAll();
-  };
-
-  const handleSyncWithBank = async (id: string, balance: number) => {
-    await authFetch("/api/accounts/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, actual_balance: balance }),
     });
     fetchAll();
   };
@@ -163,7 +211,15 @@ export default function Dashboard() {
       <Nav />
 
       <main className="page-shell">
-        <CashPositionStrip accounts={accounts} commitments={commitments} projection={trendProjection} lastUpdated={lastUpdated} />
+        <ClarityHome
+          accounts={accounts}
+          commitments={commitments}
+          projection={trendProjection}
+          prompts={prompts}
+          lastSyncedAt={lastSyncedAt}
+          syncing={syncing}
+          onResolve={user ? handleResolvePrompt : undefined}
+        />
 
         <div>
           <ProjectionChart
@@ -187,7 +243,6 @@ export default function Dashboard() {
           <QuickActions
             accounts={accounts}
             onAddCommitment={handleAddCommitment}
-            onReconcile={handleSyncWithBank}
             onAddAccount={handleAddAccount}
             onLogTransaction={handleLogTransaction}
           />

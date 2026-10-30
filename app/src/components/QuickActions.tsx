@@ -14,7 +14,6 @@ interface Props {
     recurrence_rule: string;
     account_id: string;
   }) => void;
-  onReconcile: (id: string, balance: number) => void;
   onAddAccount: (data: { name: string; type: string; current_balance: number; is_reserve: boolean }) => void;
   onLogTransaction: (data: {
     description: string;
@@ -26,14 +25,14 @@ interface Props {
   }) => void;
 }
 
-type ModalType = "commitment" | "reconcile" | "account" | "transaction" | null;
+type ModalType = "commitment" | "account" | "transaction" | null;
 
-export default function QuickActions({ accounts, onAddCommitment, onReconcile, onAddAccount, onLogTransaction }: Props) {
+export default function QuickActions({ accounts, onAddCommitment, onAddAccount, onLogTransaction }: Props) {
   const [modal, setModal] = useState<ModalType>(null);
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <button
           onClick={() => setModal("commitment")}
           className="btn btn-ghost w-full"
@@ -42,15 +41,6 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
           Add Bill / Income
-        </button>
-        <button
-          onClick={() => setModal("reconcile")}
-          className="btn btn-ghost w-full"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Sync with Bank
         </button>
         <button
           onClick={() => setModal("transaction")}
@@ -78,16 +68,6 @@ export default function QuickActions({ accounts, onAddCommitment, onReconcile, o
           onClose={() => setModal(null)}
           onSubmit={(data) => {
             onAddCommitment(data);
-            setModal(null);
-          }}
-        />
-      )}
-      {modal === "reconcile" && (
-        <ReconcileModal
-          accounts={accounts}
-          onClose={() => setModal(null)}
-          onSubmit={(id, balance) => {
-            onReconcile(id, balance);
             setModal(null);
           }}
         />
@@ -230,43 +210,6 @@ function CommitmentModal({
         <button onClick={() => onSubmit({ ...form, recurrence_rule: effectiveRule, amount: parseFloat(form.amount) || 0 })} disabled={!form.name || !form.amount || (isCustom && !customValue)} className="px-5 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           Add {form.type === "income" ? "Income" : "Bill"}
         </button>
-      </div>
-    </Overlay>
-  );
-}
-
-function ReconcileModal({
-  accounts,
-  onClose,
-  onSubmit,
-}: {
-  accounts: Account[];
-  onClose: () => void;
-  onSubmit: (id: string, balance: number) => void;
-}) {
-  const [accountId, setAccountId] = useState(accounts[0]?.id || "");
-  const [balance, setBalance] = useState("");
-  const selected = accounts.find((a) => a.id === accountId);
-
-  return (
-    <Overlay onClose={onClose}>
-      <h3 className="text-lg font-semibold text-[var(--text)] mb-4">Sync with Bank</h3>
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Account</label>
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none">
-            {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name} — ${a.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</option>))}
-          </select>
-        </div>
-        {selected && (<p className="text-sm text-[var(--muted)]">Current balance: <strong>${selected.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></p>)}
-        <div>
-          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Actual Balance ($)</label>
-          <input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="Enter what your bank shows" step="0.01" className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none" />
-        </div>
-      </div>
-      <div className="flex justify-end gap-3 mt-5">
-        <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">Cancel</button>
-        <button onClick={() => onSubmit(accountId, parseFloat(balance))} disabled={!balance} className="px-5 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Update Balance</button>
       </div>
     </Overlay>
   );
