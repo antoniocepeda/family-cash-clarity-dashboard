@@ -12,6 +12,8 @@ interface Props {
   prompts: HelpPrompt[];
   lastSyncedAt: string | null;
   syncing: boolean;
+  resolvingId?: string | null;
+  resolveError?: string | null;
   onResolve?: (promptId: string, choiceId: string) => void;
 }
 
@@ -52,6 +54,8 @@ export default function ClarityHome({
   prompts,
   lastSyncedAt,
   syncing,
+  resolvingId = null,
+  resolveError = null,
   onResolve,
 }: Props) {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -181,30 +185,29 @@ export default function ClarityHome({
       </section>
 
       {prompts.length > 0 && (
-        <section className="surface px-5 py-5 sm:px-7">
+        <section className="surface scroll-mb-[calc(var(--tabbar-height)+var(--safe-bottom)+0.75rem)] px-5 py-5 sm:px-7 md:scroll-mb-4">
           <p className="eyebrow">Needs your help</p>
           <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
             {prompts.length === 1 ? "1 thing to match" : `${prompts.length} things to match`}
           </h2>
+          {resolveError && <p className="mt-3 text-sm text-[var(--negative)]">{resolveError}</p>}
           <ul className="mt-4 space-y-4">
             {prompts.map((prompt) => (
               <li key={prompt.id} className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
                 <p className="text-sm font-medium text-[var(--text)]">{prompt.title}</p>
                 <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{prompt.detail}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-col gap-2">
                   {prompt.choices.map((choice) => (
                     <button
                       key={choice.id}
                       type="button"
-                      disabled={!onResolve}
+                      disabled={!onResolve || resolvingId !== null}
                       onClick={() => onResolve?.(prompt.id, choice.id)}
-                      className={`rounded-full px-3 py-2 text-xs font-semibold ${
-                        choice.action === "dismiss"
-                          ? "bg-[var(--surface-3)] text-[var(--muted)]"
-                          : "bg-[var(--accent-soft)] text-[var(--accent)]"
+                      className={`btn min-h-11 w-full justify-start px-4 text-left text-sm ${
+                        choice.action === "dismiss" ? "btn-ghost" : "btn-primary"
                       }`}
                     >
-                      {choice.label}
+                      {resolvingId === prompt.id ? "Saving…" : choice.label}
                     </button>
                   ))}
                 </div>
