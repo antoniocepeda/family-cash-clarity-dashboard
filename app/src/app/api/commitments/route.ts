@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth, withPublicRead } from "@/lib/auth";
 import { createCommitment, deleteCommitment, listCommitments, updateCommitment } from "@/lib/repositories/firestore";
 import { getAllInstancesForCommitments } from "@/lib/instances";
+import { materializeHorizonEnd } from "@/lib/schedule";
 import { CommitmentInstance } from "@/lib/types";
-import { addDays, startOfDay } from "date-fns";
+import { startOfDay } from "date-fns";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
 async function handleGET(_req: NextRequest, { user }: { user: DecodedIdToken }) {
   const includeInactive = new URL(_req.url).searchParams.get("include_inactive") === "1";
   const commitments = await listCommitments(user.uid, !includeInactive);
-  const allInstances = await getAllInstancesForCommitments(user.uid, addDays(startOfDay(new Date()), 28));
+  const allInstances = await getAllInstancesForCommitments(user.uid, materializeHorizonEnd(startOfDay(new Date())));
   const instanceMap = new Map<string, CommitmentInstance[]>();
   for (const inst of allInstances) {
     const arr = instanceMap.get(inst.commitment_id) || [];

@@ -32,6 +32,26 @@ function isJwtShape(token: string): boolean {
 }
 
 /**
+ * Cloud Scheduler may send X-Cron-Key or Bearer with CRON_SECRET.
+ * The household agent key is also accepted so the job can run before a separate secret exists.
+ */
+export function decideSchedulerAccess(input: {
+  cronKeyHeader: string | null;
+  authorizationHeader: string | null;
+  configuredCronSecret: string | null;
+  agentDecision: AgentCredentialDecision;
+}): boolean {
+  const secret = input.configuredCronSecret?.trim() ?? "";
+  if (secret) {
+    const cronHeader = input.cronKeyHeader?.trim() ?? "";
+    if (cronHeader && agentKeysMatch(cronHeader, secret)) return true;
+    const bearer = input.authorizationHeader?.match(/^Bearer\s+(\S+)\s*$/i)?.[1] ?? "";
+    if (bearer && agentKeysMatch(bearer, secret)) return true;
+  }
+  return input.agentDecision === "match";
+}
+
+/**
  * Decide whether this request is presenting the agent key.
  * X-Agent-Key is always an agent attempt. A Bearer token is an agent attempt when
  * it matches the configured key, or when a key is configured and the token is not

@@ -30,10 +30,8 @@ function advanceByRule(base: Date, rule: string): Date {
 
 interface Props {
   commitments: CommitmentWithInstances[];
-  onRollover: (id: string, instanceDueDate: string) => void;
   onEditInstanceAmount?: (commitmentId: string, dueDate: string, newAmount: number) => void;
   onReceiveIncome?: (commitmentId: string, dueDate: string, actualAmount: number) => void;
-  onLeftover?: (commitmentId: string, instanceDueDate: string, action: "rollover" | "release") => void;
   simulatedIds: Set<string>;
   onSimulateToggle: (id: string) => void;
 }
@@ -99,7 +97,7 @@ function expandCommitmentOccurrences(
   return rows;
 }
 
-export default function UpcomingCommitments({ commitments, onRollover, onEditInstanceAmount, onReceiveIncome, onLeftover, simulatedIds, onSimulateToggle }: Props) {
+export default function UpcomingCommitments({ commitments, onEditInstanceAmount, onReceiveIncome, simulatedIds, onSimulateToggle }: Props) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [receivingKey, setReceivingKey] = useState<string | null>(null);
@@ -365,41 +363,9 @@ export default function UpcomingCommitments({ commitments, onRollover, onEditIns
                             Receive
                           </button>
                         )
-                      ) : isOverdue && commitment.recurrence_rule && remaining > 0.005 && onLeftover ? (
-                        <>
-                          <button
-                            onClick={() => {
-                              const dueDate = format(occurrenceDate, "yyyy-MM-dd");
-                              onLeftover(commitment.id, dueDate, "rollover");
-                            }}
-                            className="text-xs font-medium text-[var(--warning)] hover:text-[var(--warning)] bg-[var(--warning-soft)] hover:bg-[var(--warning-soft)] px-2.5 py-1.5 rounded-lg transition-colors"
-                            title="Carry leftover into next period's envelope"
-                          >
-                            Roll Over ${remaining.toFixed(2)}
-                          </button>
-                          <button
-                            onClick={() => {
-                              const dueDate = format(occurrenceDate, "yyyy-MM-dd");
-                              onLeftover(commitment.id, dueDate, "release");
-                            }}
-                            className="text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] px-2.5 py-1.5 rounded-lg transition-colors"
-                            title="Release unspent amount back to cash on hand"
-                          >
-                            Release ${remaining.toFixed(2)}
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            const dueDate = format(occurrenceDate, "yyyy-MM-dd");
-                            onRollover(commitment.id, dueDate);
-                          }}
-                          className="text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)] px-2.5 py-1.5 rounded-lg transition-colors"
-                          title="Skip remaining and move to next cycle"
-                        >
-                          Rollover
-                        </button>
-                      )}
+                      ) : isOverdue ? (
+                        <span className="text-xs font-semibold text-[var(--negative)]">Overdue</span>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
