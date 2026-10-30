@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { format } from "date-fns";
 import { getFirebaseAdminFirestore } from "@/lib/firebase-admin";
 import { planFutureDueDateEdit } from "@/lib/instance-edit";
-import { learnBankTag, normalizeBankTags, type HelpPrompt } from "@/lib/reconcile";
+import { learnBankTag, normalizeAccountHint, normalizeBankTags, type HelpPrompt } from "@/lib/reconcile";
 import { normalizeRecurrenceCount, normalizeRecurrenceEnd } from "@/lib/schedule";
 import {
   Account,
@@ -89,6 +89,7 @@ function normalizeCommitment(id: string, data: FirebaseFirestore.DocumentData): 
     recurrence_end_date: normalizeRecurrenceEnd(data.recurrence_end_date ?? data.recurrenceEndDate ?? null),
     recurrence_count: normalizeRecurrenceCount(data.recurrence_count ?? data.recurrenceCount ?? null),
     bank_match_tags: normalizeBankTags(data.bank_match_tags ?? data.bankMatchTags ?? null),
+    account_hint: normalizeAccountHint(data.account_hint ?? data.accountHint ?? null),
     priority: (data.priority ?? "normal") as Commitment["priority"],
     autopay: isTruthyNumber(data.autopay),
     account_id: (data.account_id ?? data.accountId ?? null) as string | null,
@@ -274,6 +275,8 @@ export async function createCommitment(userId: string, body: Partial<Commitment>
     recurrenceCount: normalizeRecurrenceCount(body.recurrence_count),
     bank_match_tags: normalizeBankTags(body.bank_match_tags ?? (body as { bank_match_tag?: unknown }).bank_match_tag),
     bankMatchTags: normalizeBankTags(body.bank_match_tags ?? (body as { bank_match_tag?: unknown }).bank_match_tag),
+    account_hint: normalizeAccountHint((body as { account_hint?: unknown }).account_hint),
+    accountHint: normalizeAccountHint((body as { account_hint?: unknown }).account_hint),
     priority: body.priority || "normal",
     autopay: body.autopay ? 1 : 0,
     account_id: body.account_id || null,
@@ -302,6 +305,11 @@ export async function updateCommitment(userId: string, body: Partial<Commitment>
     const tags = normalizeBankTags(body.bank_match_tags ?? body.bank_match_tag);
     limits.bank_match_tags = tags;
     limits.bankMatchTags = tags;
+  }
+  if ("account_hint" in body) {
+    const hint = normalizeAccountHint(body.account_hint);
+    limits.account_hint = hint;
+    limits.accountHint = hint;
   }
   await collection(userId, COLLECTIONS.commitments).doc(body.id).set(
     {

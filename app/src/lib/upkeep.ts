@@ -7,6 +7,7 @@ import {
   addBankMatchTag,
   closeInstanceAsPaid,
   getLedgerEntry,
+  getPlaidStatus,
   getReconcilePrompt,
   listCommitments,
   listInstances,
@@ -20,12 +21,16 @@ import {
 export async function reconcileOpenBills(userId: string) {
   const materialized = await materializeRollingInstances(userId);
   const today = format(startOfDay(new Date()), "yyyy-MM-dd");
-  const [commitments, instances, ledger, stored] = await Promise.all([
+  const [commitments, instances, ledger, stored, plaid] = await Promise.all([
     listCommitments(userId, false),
     listInstances(userId),
     listLedger(userId),
     listReconcilePromptDocs(userId),
+    getPlaidStatus(userId),
   ]);
+  const maskByAccount = new Map(
+    plaid.accounts.filter((account) => account.mask).map((account) => [account.app_account_id, account.mask as string])
+  );
   const byId = new Map(commitments.map((commitment) => [commitment.id, commitment]));
   const linkedLedgers = new Set(
     ledger.filter((entry) => entry.commitment_id || (entry.allocations?.length ?? 0) > 0).map((entry) => entry.id)
@@ -37,6 +42,7 @@ export async function reconcileOpenBills(userId: string) {
       instanceId: instance.id,
       name: instance.name_override || commitment?.name || instance.commitment_name || "Bill",
       bankMatchTags: commitment?.bank_match_tags ?? [],
+      accountHint: commitment?.account_hint ?? null,
       dueDate: instance.due_date,
       plannedAmount: instance.planned_amount,
       status: instance.status,
@@ -52,6 +58,8 @@ export async function reconcileOpenBills(userId: string) {
       date: entry.date,
       pending: Boolean(entry.pending),
       linked: linkedLedgers.has(entry.id),
+      accountId: entry.account_id,
+      accountMask: maskByAccount.get(entry.account_id) ?? null,
     }));
 
   const plan = planReconciliation({

@@ -1,6 +1,8 @@
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 
 export const DATE_WINDOW_DAYS = 10;
+/** Auto-match only when the nearest due date is at least this many days closer than the runner-up. */
+export const DATE_TIEBREAK_DAYS = 4;
 export const AMOUNT_TOLERANCE_RATIO = 0.4;
 export const AMOUNT_TOLERANCE_FLOOR = 50;
 export const HELP_PROMPT_LIMIT = 8;
@@ -21,6 +23,8 @@ export type OpenBill = {
   type: "income" | "bill";
   /** Extra bank-statement names for this bill, besides the display name. */
   bankMatchTags?: string[];
+  /** App account id, Plaid account id, or card mask this bill is paid from. */
+  accountHint?: string | null;
 };
 
 export type BankTxn = {
@@ -30,6 +34,8 @@ export type BankTxn = {
   date: string;
   pending?: boolean;
   linked?: boolean;
+  accountId?: string | null;
+  accountMask?: string | null;
 };
 
 export type AutoMatch = {
@@ -151,6 +157,27 @@ export function normalizeBankTags(value: unknown): string[] {
  * Append a cleaned merchant name. Existing tags stay as written.
  * The same name with different capitalization is not added again.
  */
+export function normalizeAccountHint(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 80) : null;
+}
+
+/** Whether a bill's account hint agrees with the transaction. Unknown when either side is blank. */
+export function accountHintRelation(
+  hint: string | null | undefined,
+  txn: { accountId?: string | null; accountMask?: string | null }
+): "match" | "mismatch" | "unknown" {
+  const hintKey = compact(hint ?? "");
+  if (!hintKey) return "unknown";
+  const keys = [txn.accountId, txn.accountMask]
+    .filter((value): value is string => Boolean(value && value.trim()))
+    .map((value) => compact(value));
+  if (keys.length === 0) return "unknown";
+  const matched = keys.some((key) => key === hintKey || (hintKey.length >= 4 && key.endsWith(hintKey)) || (key.length >= 4 && hintKey.endsWith(key)));
+  return matched ? "match" : "mismatch";
+}
+
 export function learnBankTag(existing: readonly string[] | null | undefined, merchantName: string): string[] {
   const tags = normalizeBankTags(existing);
   const cleaned = cleanMerchantTag(merchantName);
@@ -175,6 +202,23 @@ type Pair = {
   amountDiff: number;
   dayDiff: number;
 };
+
+function viablePairs(group: Pair[]): Pair[] {
+  const allowed = group.filter((pair) => accountHintRelation(pair.bill.accountHint, pair.txn) !== "mismatch");
+  const hinted = allowed.filter((pair) => accountHintRelation(pair.bill.accountHint, pair.txn) === "match");
+  return hinted.length > 0 ? hinted : allowed;
+}
+
+/** Closest due date wins when it leads by DATE_TIEBREAK_DAYS. A single option always wins. */
+function clearWinner(group: Pair[]): Pair | null {
+  const options = [...viablePairs(group)].sort(
+    (a, b) => a.dayDiff - b.dayDiff || b.nameScore - a.nameScore || a.bill.instanceId.localeCompare(b.bill.instanceId)
+  );
+  if (options.length === 0) return null;
+  if (options.length === 1) return options[0];
+  if (options[1].dayDiff - options[0].dayDiff >= DATE_TIEBREAK_DAYS) return options[0];
+  return null;
+}
 
 function candidatePairs(bills: OpenBill[], txns: BankTxn[], requireName: boolean): Pair[] {
   const pairs: Pair[] = [];
@@ -257,33 +301,43 @@ export function planReconciliation(input: {
   const remaining = () =>
     namedPairs.filter((pair) => !assignedBills.has(pair.bill.instanceId) && !assignedTxns.has(pair.txn.id));
 
-  let progressed = true;
-  while (progressed) {
-    progressed = false;
-    const open = remaining();
+  const tryAssign = (open: Pair[]) => {
     const byTxn = new Map<string, Pair[]>();
     for (const pair of open) {
       const group = byTxn.get(pair.txn.id) ?? [];
       group.push(pair);
       byTxn.set(pair.txn.id, group);
     }
+    let assigned = false;
     for (const group of byTxn.values()) {
-      if (group.length !== 1) continue;
-      const pair = group[0];
-      const billPairs = open.filter((item) => item.bill.instanceId === pair.bill.instanceId);
-      if (billPairs.length !== 1) continue;
-      assignedBills.add(pair.bill.instanceId);
-      assignedTxns.add(pair.txn.id);
+      const live = group.filter((pair) => !assignedBills.has(pair.bill.instanceId) && !assignedTxns.has(pair.txn.id));
+      const winner = clearWinner(live);
+      if (!winner) continue;
+      if (assignedBills.has(winner.bill.instanceId) || assignedTxns.has(winner.txn.id)) continue;
+      const billLive = open.filter(
+        (pair) =>
+          pair.bill.instanceId === winner.bill.instanceId &&
+          !assignedBills.has(pair.bill.instanceId) &&
+          !assignedTxns.has(pair.txn.id)
+      );
+      const billWinner = clearWinner(billLive);
+      if (!billWinner || billWinner.txn.id !== winner.txn.id) continue;
+      assignedBills.add(winner.bill.instanceId);
+      assignedTxns.add(winner.txn.id);
       matches.push({
-        commitmentId: pair.bill.commitmentId,
-        instanceId: pair.bill.instanceId,
-        dueDate: pair.bill.dueDate,
-        transactionId: pair.txn.id,
-        actualAmount: pair.txn.amount,
+        commitmentId: winner.bill.commitmentId,
+        instanceId: winner.bill.instanceId,
+        dueDate: winner.bill.dueDate,
+        transactionId: winner.txn.id,
+        actualAmount: winner.txn.amount,
       });
-      progressed = true;
+      assigned = true;
     }
-  }
+    return assigned;
+  };
+
+  let progressed = true;
+  while (progressed) progressed = tryAssign(remaining());
 
   const prompts: HelpPrompt[] = [];
   const ambiguousTxns = new Set<string>();
@@ -296,12 +350,13 @@ export function planReconciliation(input: {
     ambiguousGroups.set(pair.txn.id, group);
   }
   for (const [txnId, group] of ambiguousGroups) {
-    if (group.length < 2) continue;
-    const txn = group[0].txn;
+    const options = viablePairs(group);
+    if (options.length < 2 || clearWinner(options)) continue;
+    const txn = options[0].txn;
     const id = `ambiguous:${txnId}`;
     ambiguousTxns.add(txnId);
     if (dismissed.has(id)) continue;
-    const uniqueBills = new Map(group.map((pair) => [pair.bill.instanceId, pair.bill]));
+    const uniqueBills = new Map(options.map((pair) => [pair.bill.instanceId, pair.bill]));
     for (const billId of uniqueBills.keys()) ambiguousBills.add(billId);
     prompts.push({
       id,
