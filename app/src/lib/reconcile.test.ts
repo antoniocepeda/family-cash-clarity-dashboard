@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { amountWithinTolerance, learnBankTag, merchantScore, planReconciliation, type BankTxn, type OpenBill } from "./reconcile";
+import { amountWithinTolerance, learnBankTag, merchantScore, planReconciliation, resolveChoiceWork, restorePrompt, withoutPrompt, type BankTxn, type HelpPrompt, type OpenBill } from "./reconcile";
 
 function bill(partial: Partial<OpenBill> & Pick<OpenBill, "instanceId" | "name" | "dueDate" | "plannedAmount">): OpenBill {
   return {
@@ -82,6 +82,47 @@ test("learning a match keeps existing tags and ignores payment noise", () => {
   assert.deepEqual(learnBankTag(["Xfinity"], "XFINITY AUTOPAY POS"), ["Xfinity"]);
   assert.deepEqual(learnBankTag(["COMCAST"], "POS DEBIT PAYMENT"), ["COMCAST"]);
   assert.deepEqual(learnBankTag(undefined, "COMCAST *CABLE"), ["COMCAST CABLE"]);
+});
+
+test("a tap drops that prompt immediately and can put it back", () => {
+  const prompts = [
+    { id: "ambiguous:txn-1", title: "Which bill?" },
+    { id: "unmatched:rent", title: "Rent was due" },
+  ];
+  const next = withoutPrompt(prompts, "ambiguous:txn-1");
+  assert.deepEqual(next.map((prompt) => prompt.id), ["unmatched:rent"]);
+  assert.deepEqual(restorePrompt(next, prompts[0]).map((prompt) => prompt.id), ["ambiguous:txn-1", "unmatched:rent"]);
+  assert.equal(restorePrompt(next, prompts[1]).length, 1);
+});
+
+test("choosing a bill only assigns that transaction, and dismiss skips a past bill", () => {
+  const ambiguous: HelpPrompt = {
+    id: "ambiguous:txn-1",
+    reason: "ambiguous",
+    title: "Which bill?",
+    detail: "",
+    choices: [
+      { id: "bill:internet_2026-11-02", label: "Internet", action: "assign", commitmentId: "internet", instanceId: "internet_2026-11-02", transactionId: "txn-1" },
+      { id: "dismiss", label: "Not a bill", action: "dismiss" },
+    ],
+  };
+  assert.deepEqual(resolveChoiceWork(ambiguous, "bill:internet_2026-11-02"), {
+    action: "assign",
+    commitmentId: "internet",
+    instanceId: "internet_2026-11-02",
+    transactionId: "txn-1",
+  });
+  assert.deepEqual(resolveChoiceWork(ambiguous, "dismiss"), { action: "dismiss" });
+
+  const past: HelpPrompt = {
+    id: "unmatched:rent_2026-10-01",
+    reason: "unmatched_past",
+    title: "Rent was due",
+    detail: "",
+    instanceId: "rent_2026-10-01",
+    choices: [{ id: "dismiss", label: "Dismiss", action: "dismiss", instanceId: "rent_2026-10-01", commitmentId: "rent" }],
+  };
+  assert.deepEqual(resolveChoiceWork(past, "dismiss"), { action: "skip", instanceId: "rent_2026-10-01" });
 });
 
 test("a past bill with no payment is asked once and stays dismissed", () => {

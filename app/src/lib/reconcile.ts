@@ -210,6 +210,38 @@ function billChoice(bill: OpenBill, txn: BankTxn): HelpChoice {
   };
 }
 
+export function withoutPrompt<T extends { id: string }>(prompts: T[], promptId: string): T[] {
+  return prompts.filter((prompt) => prompt.id !== promptId);
+}
+
+export function restorePrompt<T extends { id: string }>(prompts: T[], prompt: T): T[] {
+  if (prompts.some((item) => item.id === prompt.id)) return prompts;
+  return [prompt, ...prompts];
+}
+
+/** The writes for one tap. A full reconcile is not part of this step. */
+export function resolveChoiceWork(prompt: HelpPrompt, choiceId: string):
+  | { action: "assign"; commitmentId: string; instanceId: string; transactionId: string }
+  | { action: "skip"; instanceId: string }
+  | { action: "dismiss" } {
+  const choice = prompt.choices.find((item) => item.id === choiceId);
+  if (!choice) throw new Error("Choice not found");
+  if (choice.action === "assign") {
+    if (!choice.transactionId || !choice.instanceId || !choice.commitmentId) throw new Error("Choice is incomplete");
+    return {
+      action: "assign",
+      commitmentId: choice.commitmentId,
+      instanceId: choice.instanceId,
+      transactionId: choice.transactionId,
+    };
+  }
+  if (prompt.reason === "unmatched_past") {
+    const instanceId = choice.instanceId || prompt.instanceId;
+    if (instanceId) return { action: "skip", instanceId };
+  }
+  return { action: "dismiss" };
+}
+
 export function planReconciliation(input: {
   bills: OpenBill[];
   transactions: BankTxn[];

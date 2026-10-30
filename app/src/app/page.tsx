@@ -10,7 +10,7 @@ import AgentActivity from "@/components/AgentActivity";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { HelpPrompt } from "@/lib/reconcile";
+import { HelpPrompt, restorePrompt, withoutPrompt } from "@/lib/reconcile";
 import { STALE_SYNC_MS } from "@/lib/schedule";
 import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerItemInput, PlaidItem, ProjectionDay } from "@/lib/types";
 
@@ -29,7 +29,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [projectionDays, setProjectionDays] = useState<14 | 30 | 60 | 90 | 120 | 150 | 180>(30);
   const [includePending, setIncludePending] = useState(true);
@@ -137,9 +136,25 @@ export default function Dashboard() {
     fetchAll();
   };
 
+  const refreshFigures = useCallback(async () => {
+    try {
+      const [acctRes, proj, trendProj] = await Promise.all([
+        authFetch("/api/accounts"),
+        fetchProjection(),
+        fetchProjection(180, false),
+      ]);
+      setAccounts(await readJsonArray<Account>(acctRes, "Accounts fetch"));
+      setProjection(proj);
+      setTrendProjection(trendProj);
+    } catch (err) {
+      console.error("Figure refresh failed:", err);
+    }
+  }, [fetchProjection]);
+
   const handleResolvePrompt = async (promptId: string, choiceId: string) => {
+    const removed = prompts.find((prompt) => prompt.id === promptId);
     setResolveError(null);
-    setResolvingId(promptId);
+    setPrompts((current) => withoutPrompt(current, promptId));
     try {
       const res = await authFetch("/api/reconcile", {
         method: "POST",
@@ -148,15 +163,14 @@ export default function Dashboard() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (removed) setPrompts((current) => restorePrompt(current, removed));
         setResolveError(typeof body.error === "string" ? body.error : "Could not update that match");
         return;
       }
-      if (Array.isArray(body.prompts)) setPrompts(body.prompts);
-      await fetchAll();
+      void refreshFigures();
     } catch (err) {
+      if (removed) setPrompts((current) => restorePrompt(current, removed));
       setResolveError(err instanceof Error ? err.message : "Could not update that match");
-    } finally {
-      setResolvingId(null);
     }
   };
 
@@ -232,7 +246,6 @@ export default function Dashboard() {
           prompts={prompts}
           lastSyncedAt={lastSyncedAt}
           syncing={syncing}
-          resolvingId={resolvingId}
           resolveError={resolveError}
           onResolve={user ? handleResolvePrompt : undefined}
         />

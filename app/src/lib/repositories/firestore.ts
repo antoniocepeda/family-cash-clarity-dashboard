@@ -597,20 +597,33 @@ export async function closeInstanceAsPaid(
   return { alreadySettled: false };
 }
 
+function normalizeReconcilePrompt(id: string, data: FirebaseFirestore.DocumentData): HelpPrompt & { status: string } {
+  return {
+    id,
+    reason: data.reason === "ambiguous" ? "ambiguous" : "unmatched_past",
+    title: String(data.title ?? ""),
+    detail: String(data.detail ?? ""),
+    instanceId: (data.instance_id ?? data.instanceId ?? undefined) as string | undefined,
+    choices: Array.isArray(data.choices) ? data.choices : [],
+    status: String(data.status ?? "open"),
+  };
+}
+
+export async function getReconcilePrompt(userId: string, id: string) {
+  const snap = await collection(userId, COLLECTIONS.reconcilePrompts).doc(id).get();
+  if (!snap.exists) return null;
+  return normalizeReconcilePrompt(snap.id, snap.data()!);
+}
+
+export async function getLedgerEntry(userId: string, id: string) {
+  const snap = await collection(userId, COLLECTIONS.ledger).doc(id).get();
+  if (!snap.exists) return null;
+  return normalizeLedger(snap.id, snap.data()!);
+}
+
 export async function listReconcilePromptDocs(userId: string): Promise<(HelpPrompt & { status: string })[]> {
   const snap = await collection(userId, COLLECTIONS.reconcilePrompts).get();
-  return snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      reason: data.reason === "ambiguous" ? "ambiguous" : "unmatched_past",
-      title: String(data.title ?? ""),
-      detail: String(data.detail ?? ""),
-      instanceId: (data.instance_id ?? data.instanceId ?? undefined) as string | undefined,
-      choices: Array.isArray(data.choices) ? data.choices : [],
-      status: String(data.status ?? "open"),
-    };
-  });
+  return snap.docs.map((doc) => normalizeReconcilePrompt(doc.id, doc.data()));
 }
 
 export async function saveReconcilePrompt(userId: string, prompt: HelpPrompt, status: "open" | "dismissed" | "resolved") {
