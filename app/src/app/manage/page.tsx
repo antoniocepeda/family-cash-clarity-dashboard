@@ -349,7 +349,14 @@ function AccountsManager({
                 <tr key={acct.id} className="hover:bg-[var(--surface-3)] transition-colors">
                   <td className="px-5 py-3 font-medium text-[var(--text)]" data-label="">{acct.name}</td>
                   <td className="px-5 py-3 capitalize text-[var(--text-secondary)]" data-label="Type">{acct.type}</td>
-                  <td className="px-5 py-3 font-semibold text-[var(--text)] tabular-nums" data-label="Balance">${acct.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
+                  <td className="px-5 py-3 font-semibold text-[var(--text)] tabular-nums" data-label="Balance">
+                    <p>${acct.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}{acct.available_balance != null ? <span className="ml-1 text-xs font-normal text-[var(--muted)]">posted</span> : null}</p>
+                    {acct.available_balance != null && (
+                      <p className="text-xs font-normal text-[var(--muted)]">
+                        {acct.type === "credit" ? "Credit left" : "Available"} ${acct.available_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </td>
                   <td className="px-5 py-3" data-label="Reserve">
                     {acct.is_reserve ? (
                       <span className="text-xs font-medium bg-[var(--warning-soft)] text-[var(--warning)] px-2 py-0.5 rounded-full">Reserve</span>

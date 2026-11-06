@@ -64,12 +64,20 @@ function isTruthyNumber(value: unknown, fallback = 0) {
   return value ? 1 : fallback;
 }
 
+function readOptionalMoney(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+}
+
 function normalizeAccount(id: string, data: FirebaseFirestore.DocumentData): Account {
+  const availableSource = data.available_balance !== undefined ? data.available_balance : data.availableBalance;
   return {
     id,
     name: String(data.name ?? ""),
     type: (data.type ?? "checking") as Account["type"],
     current_balance: Number(data.current_balance ?? data.currentBalance ?? 0),
+    available_balance: readOptionalMoney(availableSource),
     is_reserve: isTruthyNumber(data.is_reserve ?? data.isReserve),
     updated_at: String(data.updated_at ?? data.updatedAt ?? new Date().toISOString()),
     plaid_account_id: (data.plaid_account_id ?? data.plaidAccountId ?? null) as string | null,
@@ -201,6 +209,8 @@ export async function createAccount(userId: string, body: Partial<Account>) {
     type: body.type,
     current_balance: Number(body.current_balance ?? 0),
     currentBalance: Number(body.current_balance ?? 0),
+    available_balance: null,
+    availableBalance: null,
     is_reserve: body.is_reserve ? 1 : 0,
     isReserve: Boolean(body.is_reserve),
   });
@@ -213,18 +223,21 @@ export async function getAccount(userId: string, id: string) {
 }
 
 export async function updateAccount(userId: string, body: Partial<Account> & { id: string }) {
-  await collection(userId, COLLECTIONS.accounts).doc(body.id).set(
-    {
-      ...stampUpdate(),
-      name: body.name,
-      type: body.type,
-      current_balance: Number(body.current_balance ?? 0),
-      currentBalance: Number(body.current_balance ?? 0),
-      is_reserve: body.is_reserve ? 1 : 0,
-      isReserve: Boolean(body.is_reserve),
-    },
-    { merge: true }
-  );
+  const patch: Record<string, unknown> = {
+    ...stampUpdate(),
+    name: body.name,
+    type: body.type,
+    current_balance: Number(body.current_balance ?? 0),
+    currentBalance: Number(body.current_balance ?? 0),
+    is_reserve: body.is_reserve ? 1 : 0,
+    isReserve: Boolean(body.is_reserve),
+  };
+  if ("available_balance" in body) {
+    const available = readOptionalMoney(body.available_balance);
+    patch.available_balance = available;
+    patch.availableBalance = available;
+  }
+  await collection(userId, COLLECTIONS.accounts).doc(body.id).set(patch, { merge: true });
   return getAccount(userId, body.id);
 }
 
@@ -1034,6 +1047,8 @@ export async function upsertPlaidAccount(
       type: mapPlaidAccountType(input.type, input.subtype),
       current_balance: input.currentBalance,
       currentBalance: input.currentBalance,
+      available_balance: input.availableBalance ?? null,
+      availableBalance: input.availableBalance ?? null,
       plaid_account_id: input.plaidAccountId,
       plaidAccountId: input.plaidAccountId,
       plaid_item_id: input.plaidItemId,
@@ -1064,6 +1079,38 @@ export async function upsertPlaidAccount(
   return appAccountId;
 }
 
+async function findPlaidLedgerDoc(userId: string, plaidTransactionId: string, pendingTransactionId?: string | null) {
+  const ledger = collection(userId, COLLECTIONS.ledger);
+  const byId = await ledger.where("plaid_transaction_id", "==", plaidTransactionId).limit(1).get();
+  if (!byId.empty) return byId.docs[0];
+  if (!pendingTransactionId) return null;
+  const byPendingId = await ledger.where("plaid_transaction_id", "==", pendingTransactionId).limit(1).get();
+  if (!byPendingId.empty) return byPendingId.docs[0];
+  const byLink = await ledger.where("plaid_pending_transaction_id", "==", pendingTransactionId).limit(1).get();
+  return byLink.docs[0] ?? null;
+}
+
+/** Drop a Plaid ledger row without touching the bank balance. Plaid balances are authoritative. */
+async function deletePlaidLedgerDoc(userId: string, doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  await reverseAllocations(userId, doc.id);
+  const items = await collection(userId, COLLECTIONS.ledgerItems).where("ledger_id", "==", doc.id).get();
+  await Promise.all(items.docs.map((item) => item.ref.delete()));
+  await doc.ref.delete();
+}
+
+async function discardReplacedPending(userId: string, keepId: string, pendingTransactionId: string) {
+  const ledger = collection(userId, COLLECTIONS.ledger);
+  const [byOldId, byLink] = await Promise.all([
+    ledger.where("plaid_transaction_id", "==", pendingTransactionId).get(),
+    ledger.where("plaid_pending_transaction_id", "==", pendingTransactionId).get(),
+  ]);
+  const extras = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+  for (const doc of [...byOldId.docs, ...byLink.docs]) {
+    if (doc.id !== keepId) extras.set(doc.id, doc);
+  }
+  await Promise.all([...extras.values()].map((doc) => deletePlaidLedgerDoc(userId, doc)));
+}
+
 export async function upsertPlaidLedgerTransaction(
   userId: string,
   input: {
@@ -1077,18 +1124,9 @@ export async function upsertPlaidLedgerTransaction(
     pending: boolean;
   }
 ) {
-  let existing = await collection(userId, COLLECTIONS.ledger)
-    .where("plaid_transaction_id", "==", input.plaidTransactionId)
-    .limit(1)
-    .get();
-  if (existing.empty && input.plaidPendingTransactionId) {
-    existing = await collection(userId, COLLECTIONS.ledger)
-      .where("plaid_transaction_id", "==", input.plaidPendingTransactionId)
-      .limit(1)
-      .get();
-  }
-  const id = existing.docs[0]?.id ?? randomUUID();
-  const existingData = existing.docs[0]?.data();
+  const existing = await findPlaidLedgerDoc(userId, input.plaidTransactionId, input.plaidPendingTransactionId);
+  const id = existing?.id ?? randomUUID();
+  const existingData = existing?.data();
   const signedAmount = Math.abs(input.amount);
   const type: LedgerEntry["type"] = input.amount < 0 ? "income" : "expense";
 
@@ -1105,8 +1143,8 @@ export async function upsertPlaidLedgerTransaction(
       commitmentId: existingData?.commitmentId ?? null,
       plaid_transaction_id: input.plaidTransactionId,
       plaidTransactionId: input.plaidTransactionId,
-      plaid_pending_transaction_id: input.plaidPendingTransactionId ?? null,
-      plaidPendingTransactionId: input.plaidPendingTransactionId ?? null,
+      plaid_pending_transaction_id: input.plaidPendingTransactionId ?? existingData?.plaid_pending_transaction_id ?? null,
+      plaidPendingTransactionId: input.plaidPendingTransactionId ?? existingData?.plaidPendingTransactionId ?? null,
       plaid_account_id: input.plaidAccountId,
       pending: input.pending,
       removed: false,
@@ -1115,17 +1153,28 @@ export async function upsertPlaidLedgerTransaction(
     { merge: true }
   );
 
-  return existing.empty ? "added" : "modified";
+  // A posted charge points at the pending id it replaced. Keep one row so the
+  // charge is not counted twice, and drop a pending row the bank voided later.
+  if (input.plaidPendingTransactionId) {
+    await discardReplacedPending(userId, id, input.plaidPendingTransactionId);
+  }
+
+  return existing ? "modified" : "added";
 }
 
-export async function markPlaidLedgerTransactionRemoved(userId: string, plaidTransactionId: string) {
+export async function markPlaidLedgerTransactionRemoved(userId: string, plaidTransactionId: string | undefined) {
+  if (!plaidTransactionId) return 0;
   const snap = await collection(userId, COLLECTIONS.ledger)
     .where("plaid_transaction_id", "==", plaidTransactionId)
     .get();
   await Promise.all(
-    snap.docs.map((d) =>
-      d.ref.set({ ...stampUpdate(), removed: true, removed_at: new Date().toISOString() }, { merge: true })
-    )
+    snap.docs.map(async (doc) => {
+      if (doc.data().pending) {
+        await deletePlaidLedgerDoc(userId, doc);
+        return;
+      }
+      await doc.ref.set({ ...stampUpdate(), removed: true, removed_at: new Date().toISOString() }, { merge: true });
+    })
   );
   return snap.size;
 }

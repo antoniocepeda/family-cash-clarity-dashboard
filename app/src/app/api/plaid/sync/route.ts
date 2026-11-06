@@ -10,9 +10,10 @@ async function handleGET(_req: NextRequest, { user }: { user: DecodedIdToken }) 
   return NextResponse.json(await getPlaidStatus(user.uid));
 }
 
-async function handlePOST(_req: NextRequest, { user }: { user: DecodedIdToken }) {
+async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) {
   await ensureUser(user.uid, user.email);
-  const summary = await syncPlaidForUser(user.uid);
+  const refresh = new URL(req.url).searchParams.get("refresh") !== "0";
+  const summary = await syncPlaidForUser(user.uid, { refresh });
   try {
     await runHouseholdUpkeep(user.uid);
   } catch (err) {

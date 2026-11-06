@@ -3,6 +3,8 @@ export interface Account {
   name: string;
   type: "checking" | "savings" | "cash" | "credit";
   current_balance: number;
+  /** Plaid available balance. Null for manual accounts and when the bank did not send one. */
+  available_balance: number | null;
   is_reserve: number;
   updated_at: string;
   plaid_account_id?: string | null;

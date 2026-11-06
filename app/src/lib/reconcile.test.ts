@@ -205,6 +205,18 @@ test("choosing a bill only assigns that transaction, and dismiss skips a past bi
   assert.deepEqual(resolveChoiceWork(past, "dismiss"), { action: "skip", instanceId: "rent_2026-10-01" });
 });
 
+test("a pending charge is not matched or offered as a bill payment", () => {
+  const plan = planReconciliation({
+    today: "2026-11-05",
+    dismissedPromptIds: [],
+    bills: [bill({ instanceId: "groceries_2026-11-01", name: "Groceries", dueDate: "2026-11-01", plannedAmount: 80 })],
+    transactions: [txn({ id: "heb", name: "H-E-B", amount: 83.35, date: "2026-11-04", pending: true })],
+  });
+
+  assert.equal(plan.matches.length, 0);
+  assert.equal(plan.prompts.some((prompt) => prompt.choices.some((choice) => choice.transactionId === "heb")), false);
+});
+
 test("a past bill with no payment is asked once and stays dismissed", () => {
   const bills = [bill({ instanceId: "rent_2026-10-01", name: "Rent", dueDate: "2026-10-01", plannedAmount: 2000 })];
   const first = planReconciliation({ today: "2026-11-01", dismissedPromptIds: [], bills, transactions: [] });
