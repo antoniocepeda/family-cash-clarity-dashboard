@@ -1,14 +1,17 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
+import Link from "next/link";
+import { cashBasisExplanation, householdCash, pendingListNote, visiblePending } from "@/lib/cash-balance";
 import { HelpPrompt } from "@/lib/reconcile";
 import { SPEND_BUFFER, buildOutlook, computeSafeToSpend } from "@/lib/safe-spend";
-import { Account, CommitmentWithInstances, ProjectionDay } from "@/lib/types";
+import { Account, CommitmentWithInstances, LedgerEntry, ProjectionDay } from "@/lib/types";
 
 interface Props {
   accounts: Account[];
   commitments: CommitmentWithInstances[];
   projection: ProjectionDay[];
+  ledger?: LedgerEntry[];
   prompts: HelpPrompt[];
   lastSyncedAt: string | null;
   syncing: boolean;
@@ -50,6 +53,7 @@ export default function ClarityHome({
   accounts,
   commitments,
   projection,
+  ledger = [],
   prompts,
   lastSyncedAt,
   syncing,
@@ -57,20 +61,22 @@ export default function ClarityHome({
   onResolve,
 }: Props) {
   const today = format(new Date(), "yyyy-MM-dd");
-  const cashOnHand = accounts.filter((account) => !account.is_reserve).reduce((sum, account) => sum + account.current_balance, 0);
-  const reserved = accounts.filter((account) => account.is_reserve).reduce((sum, account) => sum + account.current_balance, 0);
+  const cash = householdCash(accounts);
+  const pending = visiblePending(ledger);
+  const accountName = new Map(accounts.map((account) => [account.id, account.name]));
   const recurringIncomeIds = commitments
     .filter((commitment) => commitment.active && commitment.type === "income" && commitment.recurrence_rule)
     .map((commitment) => commitment.id);
 
   const spend = computeSafeToSpend({
-    cashOnHand,
+    cashOnHand: cash.amount,
     days: projection,
     recurringIncomeIds,
     today,
     buffer: SPEND_BUFFER,
   });
-  const outlook = buildOutlook({ startingCash: cashOnHand, days: projection, recurringIncomeIds });
+  const outlook = buildOutlook({ startingCash: cash.amount, days: projection, recurringIncomeIds });
+  const cashWord = cash.basis === "current" ? "posted" : "available";
 
   const outlookTitle = !outlook.covered
     ? "No"
@@ -107,10 +113,11 @@ export default function ClarityHome({
         </div>
         <HeroAmount value={spend.safeToSpend} />
         <p className="mt-4 max-w-md text-sm leading-relaxed text-[var(--muted)]">
-          {fmt(spend.cashOnHand)} in cash − {fmt(spend.billsTotal)} due before{" "}
+          {fmt(spend.cashOnHand)} {cashWord} − {fmt(spend.billsTotal)} due before{" "}
           {spend.paycheckDate ? format(parseISO(spend.paycheckDate), "MMM d") : "the next 2 weeks"} − {fmt(spend.buffer)} buffer.
         </p>
-        {reserved > 0 && <p className="mt-2 text-sm text-[var(--muted)]">{fmt(reserved)} is set aside in savings.</p>}
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">{cashBasisExplanation(cash.basis)}</p>
+        {cash.reserved > 0 && <p className="mt-2 text-sm text-[var(--muted)]">{fmt(cash.reserved)} is set aside in savings.</p>}
         <p className="mt-3 text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">{syncedLabel(lastSyncedAt, syncing)}</p>
       </section>
 
@@ -144,6 +151,41 @@ export default function ClarityHome({
         )}
       </section>
       </div>
+
+      {pending.length > 0 && (
+        <section className="surface px-5 py-5 sm:px-7">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="eyebrow">Pending</p>
+              <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
+                {pending.length === 1 ? "1 transaction not posted yet" : `${pending.length} transactions not posted yet`}
+              </h2>
+            </div>
+            <Link href="/transactions" className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">
+              Ledger
+            </Link>
+          </div>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--muted)]">{pendingListNote(cash.basis)}</p>
+          <ul className="mt-4 divide-y divide-[var(--line)]">
+            {pending.map((entry) => (
+              <li key={entry.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--text)]">{entry.description}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {format(parseISO(entry.date), "EEE, MMM d")}
+                    {accountName.get(entry.account_id) ? ` · ${accountName.get(entry.account_id)}` : ""}
+                    {" · Pending"}
+                  </p>
+                </div>
+                <p className={`money shrink-0 text-sm ${entry.type === "income" ? "text-[var(--positive)]" : "text-[var(--text)]"}`}>
+                  {entry.type === "income" ? "+" : "−"}
+                  {fmt(entry.amount)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="surface px-5 py-5 sm:px-7">
         <div className="flex items-start justify-between gap-3">

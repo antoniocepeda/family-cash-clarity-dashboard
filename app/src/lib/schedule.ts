@@ -10,8 +10,17 @@ export const MATERIALIZE_DAYS = 270;
 export const RECONCILE_LOOKBACK_DAYS = 120;
 
 /** Refresh Plaid on app open when the newest sync is older than this. */
-export const STALE_SYNC_MINUTES = 15;
+export const STALE_SYNC_MINUTES = 2;
 export const STALE_SYNC_MS = STALE_SYNC_MINUTES * 60 * 1000;
+
+/**
+ * transactions/refresh finishes in the background. A second pull this long
+ * after a refresh picks up pending charges that were not in the first response.
+ */
+export const SYNC_FOLLOW_UP_MS = 90_000;
+
+/** While Home is open and visible, sync again on this interval once the last sync is stale. */
+export const BACKGROUND_SYNC_MS = 3 * 60 * 1000;
 
 export function advanceByRule(base: Date, rule: string): Date {
   if (rule.startsWith("every_")) {

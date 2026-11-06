@@ -1,5 +1,6 @@
 import "server-only";
 
+import { plaidTransactionDate, plaidTransactionLabel } from "@/lib/cash-balance";
 import { decryptPlaidAccessToken, getPlaidClient } from "@/lib/plaid";
 import {
   getPlaidCursor,
@@ -23,7 +24,8 @@ export type PlaidSyncSummary = {
   errors: { item_id: string; error: string }[];
 };
 
-export async function syncPlaidForUser(userId: string): Promise<PlaidSyncSummary> {
+export async function syncPlaidForUser(userId: string, options: { refresh?: boolean } = {}): Promise<PlaidSyncSummary> {
+  const requestRefresh = options.refresh !== false;
   const plaid = getPlaidClient();
   const items = await listPlaidItemsWithTokens(userId);
   const summary: PlaidSyncSummary = {
@@ -62,11 +64,14 @@ export async function syncPlaidForUser(userId: string): Promise<PlaidSyncSummary
         summary.accounts += 1;
       }
 
-      try {
-        await plaid.transactionsRefresh({ access_token: accessToken });
-        summary.refresh_requested += 1;
-      } catch {
-        summary.refresh_skipped += 1;
+      if (requestRefresh) {
+        try {
+          // Refresh is asynchronous. The follow-up sync pulls charges that land after this returns.
+          await plaid.transactionsRefresh({ access_token: accessToken });
+          summary.refresh_requested += 1;
+        } catch {
+          summary.refresh_skipped += 1;
+        }
       }
 
       let cursor = await getPlaidCursor(userId, item.item_id);
@@ -78,39 +83,28 @@ export async function syncPlaidForUser(userId: string): Promise<PlaidSyncSummary
           count: 500,
         });
 
-        for (const transaction of synced.data.added) {
+        // Pending rows are kept. Plaid's first historical sync often omits them;
+        // later syncs add them, then replace each one when it posts.
+        const writeTransaction = async (transaction: (typeof synced.data.added)[number], countAs: "result" | "modified") => {
           const appAccountId = accountMap.get(transaction.account_id);
-          if (!appAccountId) continue;
+          if (!appAccountId) return;
           const result = await upsertPlaidLedgerTransaction(userId, {
             plaidTransactionId: transaction.transaction_id,
             plaidPendingTransactionId: transaction.pending_transaction_id ?? null,
             plaidAccountId: transaction.account_id,
             appAccountId,
-            date: transaction.date,
-            name: transaction.name,
+            date: plaidTransactionDate(transaction),
+            name: plaidTransactionLabel(transaction),
             amount: Number(transaction.amount),
-            pending: transaction.pending,
+            pending: Boolean(transaction.pending),
           });
           if (transaction.pending) summary.pending += 1;
-          summary[result] += 1;
-        }
+          if (countAs === "result") summary[result] += 1;
+          else summary.modified += 1;
+        };
 
-        for (const transaction of synced.data.modified) {
-          const appAccountId = accountMap.get(transaction.account_id);
-          if (!appAccountId) continue;
-          await upsertPlaidLedgerTransaction(userId, {
-            plaidTransactionId: transaction.transaction_id,
-            plaidPendingTransactionId: transaction.pending_transaction_id ?? null,
-            plaidAccountId: transaction.account_id,
-            appAccountId,
-            date: transaction.date,
-            name: transaction.name,
-            amount: Number(transaction.amount),
-            pending: transaction.pending,
-          });
-          if (transaction.pending) summary.pending += 1;
-          summary.modified += 1;
-        }
+        for (const transaction of synced.data.added) await writeTransaction(transaction, "result");
+        for (const transaction of synced.data.modified) await writeTransaction(transaction, "modified");
 
         for (const removed of synced.data.removed) {
           summary.removed += await markPlaidLedgerTransactionRemoved(userId, removed.transaction_id);

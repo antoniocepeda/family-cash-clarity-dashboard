@@ -1,4 +1,5 @@
 import { addDays, format, parseISO, isBefore, isEqual, startOfDay } from "date-fns";
+import { projectionStartingBalance, shouldApplyPendingTransaction } from "./cash-balance";
 import { expandOccurrenceDates } from "./schedule";
 import { listAccounts, listCommitments, listInstances, listLedger } from "./repositories/firestore";
 
@@ -68,9 +69,7 @@ export async function generateProjection(
 
   const simulateSet = new Set(simulateEarlyIds);
 
-  const totalBalance = accounts
-    .filter((a) => !a.is_reserve)
-    .reduce((sum, a) => sum + a.current_balance, 0);
+  const totalBalance = projectionStartingBalance(accounts, includePending);
 
   const today = startOfDay(new Date());
   const endDate = addDays(today, days);
@@ -148,9 +147,12 @@ export async function generateProjection(
     }
   }
 
-  if (includePending) {
+  const pendingNeedsALine = includePending && accounts.some((account) => shouldApplyPendingTransaction(account, true));
+  if (pendingNeedsALine) {
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
     const pendingEntries = (await listLedger(userId)).filter((entry) => entry.pending && !entry.removed);
     for (const entry of pendingEntries) {
+      if (!shouldApplyPendingTransaction(accountsById.get(entry.account_id), true)) continue;
       const entryDate = startOfDay(parseISO(entry.date));
       const effectiveDate = isBefore(entryDate, today) ? today : entryDate;
       const key = format(effectiveDate, "yyyy-MM-dd");
@@ -185,7 +187,7 @@ export async function generateAlerts(userId: string): Promise<{
   message: string;
   action_text: string;
 }[]> {
-  const projection = await generateProjection(userId, 14);
+  const projection = await generateProjection(userId, 14, [], true);
   const alerts: { severity: "critical" | "warning" | "info"; message: string; action_text: string }[] = [];
 
   const BUFFER_THRESHOLD = 500;

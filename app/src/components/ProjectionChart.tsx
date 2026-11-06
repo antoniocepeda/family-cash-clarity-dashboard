@@ -139,6 +139,11 @@ export default function ProjectionChart({
           </div>
         )}
       </div>
+      <p className="mb-3 text-xs leading-relaxed text-[var(--faint)]">
+        {includePending
+          ? "Includes pending. Available balance is used as-is, so those charges are not counted twice. Accounts with only a posted balance still have pending charges subtracted here."
+          : "Ignores pending. The line starts from the posted balance, with pending charges left in."}
+      </p>
       <div className="h-[280px] w-full lg:h-[400px]">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>

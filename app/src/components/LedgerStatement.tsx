@@ -289,9 +289,11 @@ export default function LedgerStatement({
     }
   };
 
+  const liveEntries = useMemo(() => entries.filter((entry) => !entry.removed), [entries]);
+
   const filtered = useMemo(() => {
     const today = new Date();
-    let result = entries;
+    let result = liveEntries;
 
     if (dateFilter !== "all") {
       result = result.filter((e) => {
@@ -330,7 +332,7 @@ export default function LedgerStatement({
     }
 
     return result;
-  }, [entries, dateFilter, searchQuery, customStart, customEnd, pendingFilter]);
+  }, [liveEntries, dateFilter, searchQuery, customStart, customEnd, pendingFilter]);
 
   const runningBalances = useMemo(() => {
     const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
@@ -354,8 +356,8 @@ export default function LedgerStatement({
   }, [filtered]);
 
   const pendingCount = useMemo(
-    () => entries.filter((e) => e.pending && !e.removed).length,
-    [entries]
+    () => liveEntries.filter((e) => e.pending).length,
+    [liveEntries]
   );
 
   const linkAmountNumber = parseFloat(linkAmount);
@@ -454,6 +456,7 @@ export default function LedgerStatement({
           ))}
           <span className="text-xs text-[var(--muted)]">
             Pending in ledger: <span className="font-semibold">{pendingCount}</span>
+            {pendingCount > 0 ? " · matched to bills only after they post" : ""}
           </span>
         </div>
 
@@ -686,7 +689,7 @@ export default function LedgerStatement({
                           >
                             {isLoading ? "..." : "Delete"}
                           </button>
-                          {entry.type === "expense" && (
+                          {entry.type === "expense" && !entry.pending && (
                             <button
                               onClick={() => startConvertToRecurring(entry)}
                               disabled={isLoading}
