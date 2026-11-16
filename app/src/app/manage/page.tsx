@@ -8,14 +8,15 @@ import RowMenu from "@/components/ui/RowMenu";
 import StatusDot from "@/components/ui/StatusDot";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { Account, Commitment, PlaidAccount, PlaidStatus } from "@/lib/types";
+import { unpaidPastDueDate } from "@/lib/overdue";
+import { Account, Commitment, CommitmentWithInstances, PlaidAccount, PlaidStatus } from "@/lib/types";
 
 type Tab = "accounts" | "commitments" | "help";
 
 export default function ManagePage() {
   const [tab, setTab] = useState<Tab>("accounts");
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [plaidStatus, setPlaidStatus] = useState<PlaidStatus>({ items: [], accounts: [] });
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +27,7 @@ export default function ManagePage() {
       authFetch("/api/plaid/sync"),
     ]);
     setAccounts(await readJsonArray<Account>(acctRes, "Accounts fetch"));
-    setCommitments(await readJsonArray<Commitment>(cmtRes, "Commitments fetch"));
+    setCommitments(await readJsonArray<CommitmentWithInstances>(cmtRes, "Commitments fetch"));
     setPlaidStatus(await plaidRes.json());
     setLoading(false);
   }, []);
@@ -378,7 +379,7 @@ function CommitmentsManager({
   plaidAccounts,
   onRefresh,
 }: {
-  commitments: Commitment[];
+  commitments: CommitmentWithInstances[];
   accounts: Account[];
   plaidAccounts: PlaidAccount[];
   onRefresh: () => void;
@@ -594,7 +595,8 @@ function CommitmentsManager({
         )}
         <div className="activity-list">
           {sorted.map((cmt) => {
-            const overdue = cmt.type !== "income" && cmt.paid !== 1 && cmt.due_date < new Date().toLocaleDateString("en-CA");
+            const today = new Date().toLocaleDateString("en-CA");
+            const overdueDate = unpaidPastDueDate(cmt, today);
             if (editing === cmt.id) {
               return (
                 <div key={cmt.id} className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-2)] p-4">
@@ -663,17 +665,17 @@ function CommitmentsManager({
               <ActivityRow
                 key={cmt.id}
                 title={cmt.name}
-                tone={cmt.type === "income" ? "in" : overdue ? "overdue" : "neutral"}
+                tone={cmt.type === "income" ? "in" : overdueDate ? "overdue" : "neutral"}
                 amount={`${cmt.type === "income" ? "+" : "−"}$${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                 subtitle={
                   <>
                     <span className="capitalize">{cmt.type}</span>
-                    <span className={overdue ? "is-overdue-text" : undefined}>· Due {cmt.due_date}</span>
+                    <span className={overdueDate ? "is-overdue-text" : undefined}>· Due {overdueDate ?? cmt.due_date}</span>
                     <span>· {formatRecurrence(cmt.recurrence_rule, cmt.recurrence_end_date, cmt.recurrence_count)}</span>
                     {(cmt.bank_match_tags ?? []).length > 0 && <span>· Statement {cmt.bank_match_tags?.join(", ")}</span>}
                     {cmt.account_hint && <span>· Card {hintLabel(cmt.account_hint)}</span>}
                     {cmt.paid === 1 && <StatusDot tone="neutral" label="Paid" />}
-                    {overdue && <StatusDot tone="negative" label="Overdue" />}
+                    {overdueDate && <StatusDot tone="negative" label="Overdue" />}
                   </>
                 }
                 trailing={

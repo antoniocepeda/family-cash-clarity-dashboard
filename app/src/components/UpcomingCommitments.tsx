@@ -152,13 +152,13 @@ export default function UpcomingCommitments({ commitments, onEditInstanceAmount,
             {allRows.map((row) => {
               const { commitment, occurrenceDate, instance } = row;
               const daysUntil = differenceInDays(occurrenceDate, today);
-              const isOverdue = daysUntil < 0;
               const isDueSoon = daysUntil <= 2 && daysUntil >= 0;
 
               const planned = instance?.planned_amount ?? commitment.amount;
               const allocated = instance?.allocated_amount ?? 0;
               const remaining = planned - allocated;
               const isFunded = instance?.status === "paid" || instance?.status === "funded" || instance?.status === "skipped" || remaining <= 0.005;
+              const isOverdue = daysUntil < 0 && !isFunded;
               const progressPct = planned > 0 ? Math.min(100, (allocated / planned) * 100) : 0;
 
               return (
