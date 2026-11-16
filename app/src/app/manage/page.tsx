@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { usePlaidLink } from "react-plaid-link";
+import LinkedBankCard from "@/components/LinkedBankCard";
 import Nav from "@/components/Nav";
 import ActivityRow from "@/components/ui/ActivityRow";
 import RowMenu from "@/components/ui/RowMenu";
@@ -10,6 +11,9 @@ import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { unpaidPastDueDate } from "@/lib/overdue";
 import { Account, Commitment, CommitmentWithInstances, PlaidAccount, PlaidStatus } from "@/lib/types";
+
+type LinkSession = { mode: "create" | "update"; itemId: string | null };
+type SyncErrorBody = { error?: string; errors?: { item_id?: string; error?: string }[] };
 
 type Tab = "accounts" | "commitments" | "help";
 
@@ -117,37 +121,71 @@ function AccountsManager({
   const [plaidMessage, setPlaidMessage] = useState<string | null>(null);
   const [plaidError, setPlaidError] = useState<string | null>(null);
   const [plaidBusy, setPlaidBusy] = useState(false);
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
+  const linkSessionRef = useRef<LinkSession>({ mode: "create", itemId: null });
+  const linkCompletedRef = useRef(false);
+
+  const finishLink = () => {
+    linkSessionRef.current = { mode: "create", itemId: null };
+    setPendingItemId(null);
+    setLinkToken(null);
+  };
 
   const { open, ready } = usePlaidLink({
     token: linkToken,
     onSuccess: async (public_token, metadata) => {
+      if (linkCompletedRef.current) return;
+      const session = linkSessionRef.current;
+      linkCompletedRef.current = true;
       setPlaidBusy(true);
       setPlaidError(null);
-      setPlaidMessage("Connecting bank...");
+      setPlaidMessage(session.mode === "update" ? "Reconnecting bank..." : "Connecting bank...");
       try {
-        const exchange = await authFetch("/api/plaid/exchange-token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ public_token, metadata }),
-        });
-        if (!exchange.ok) throw new Error((await exchange.json()).error || "Bank connection failed");
+        if (session.mode === "update") {
+          if (!session.itemId) throw new Error("Reconnect session was missing the bank");
+          const sync = await authFetch(
+            `/api/plaid/sync?item_id=${encodeURIComponent(session.itemId)}&reconnected=1`,
+            { method: "POST" }
+          );
+          const body = (await sync.json().catch(() => ({}))) as SyncErrorBody;
+          if (!sync.ok && sync.status !== 207) throw new Error(body.error || "Bank sync failed");
+          const itemError =
+            body.errors?.find((entry) => entry.item_id === session.itemId) ?? body.errors?.[0];
+          if (itemError?.error) {
+            setPlaidMessage(null);
+            setPlaidError(itemError.error);
+          } else {
+            setPlaidMessage("Bank reconnected. Accounts and transactions were synced.");
+          }
+        } else {
+          const exchange = await authFetch("/api/plaid/exchange-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ public_token, metadata }),
+          });
+          if (!exchange.ok) throw new Error((await exchange.json()).error || "Bank connection failed");
 
-        const sync = await authFetch("/api/plaid/sync", { method: "POST" });
-        if (!sync.ok && sync.status !== 207) throw new Error((await sync.json()).error || "Bank sync failed");
-        setPlaidMessage("Bank connected. Accounts and transactions were synced.");
-        setLinkToken(null);
+          const sync = await authFetch("/api/plaid/sync", { method: "POST" });
+          if (!sync.ok && sync.status !== 207) throw new Error((await sync.json()).error || "Bank sync failed");
+          setPlaidMessage("Bank connected. Accounts and transactions were synced.");
+        }
         onRefresh();
       } catch (err) {
         setPlaidError(err instanceof Error ? err.message : "Bank connection failed");
       } finally {
+        finishLink();
         setPlaidBusy(false);
       }
     },
     onExit: (err) => {
+      if (linkCompletedRef.current) {
+        setLinkToken(null);
+        return;
+      }
       if (err) {
         setPlaidError(err.display_message || err.error_message || "Plaid Link was closed before completing.");
       }
-      setLinkToken(null);
+      finishLink();
       setPlaidBusy(false);
     },
   });
@@ -193,20 +231,32 @@ function AccountsManager({
     onRefresh();
   };
 
-  const connectBank = async () => {
+  const startLink = async (session: LinkSession) => {
     setPlaidBusy(true);
     setPlaidError(null);
     setPlaidMessage(null);
+    linkCompletedRef.current = false;
+    linkSessionRef.current = session;
+    setPendingItemId(session.itemId);
     try {
-      const res = await authFetch("/api/plaid/link-token", { method: "POST" });
+      const res = await authFetch("/api/plaid/link-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(session.itemId ? { item_id: session.itemId } : {}),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not start Plaid Link");
       setLinkToken(data.link_token);
     } catch (err) {
+      linkSessionRef.current = { mode: "create", itemId: null };
+      setPendingItemId(null);
       setPlaidError(err instanceof Error ? err.message : "Could not start Plaid Link");
       setPlaidBusy(false);
     }
   };
+
+  const connectBank = () => startLink({ mode: "create", itemId: null });
+  const reconnectBank = (itemId: string) => startLink({ mode: "update", itemId });
 
   return (
     <div className="space-y-4">
@@ -243,16 +293,13 @@ function AccountsManager({
           {plaidStatus.items.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {plaidStatus.items.map((item) => (
-                <div key={item.item_id} className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-[var(--text)]">{item.institution_name || "Linked institution"}</span>
-                    <StatusDot tone={item.status === "connected" ? "positive" : "negative"} label={item.status === "connected" ? "Connected" : "Error"} />
-                  </div>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    {item.last_synced_at ? `Last synced ${new Date(item.last_synced_at).toLocaleString()}` : "Not synced yet"}
-                  </p>
-                  {item.error_message && <p className="mt-1 text-xs text-[var(--negative)]">{item.error_message}</p>}
-                </div>
+                <LinkedBankCard
+                  key={item.item_id}
+                  item={item}
+                  busy={plaidBusy}
+                  reconnecting={pendingItemId === item.item_id && plaidBusy}
+                  onReconnect={reconnectBank}
+                />
               ))}
             </div>
           )}

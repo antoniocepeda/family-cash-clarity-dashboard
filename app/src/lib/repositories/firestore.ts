@@ -970,6 +970,16 @@ export async function listPlaidItemsWithTokens(userId: string) {
   }));
 }
 
+export async function getPlaidItemWithToken(userId: string, itemId: string) {
+  const snap = await collection(userId, COLLECTIONS.plaidItems).doc(itemId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() ?? {};
+  return {
+    ...normalizePlaidItem(snap.id, data),
+    encrypted_access_token: String(data.encrypted_access_token ?? ""),
+  };
+}
+
 export async function getPlaidCursor(userId: string, itemId: string) {
   const snap = await collection(userId, COLLECTIONS.plaidSync).doc(itemId).get();
   return snap.exists ? ((snap.data()?.cursor ?? null) as string | null) : null;
@@ -994,6 +1004,13 @@ export async function savePlaidSyncState(userId: string, itemId: string, cursor:
 export async function markPlaidItemError(userId: string, itemId: string, code: string, message: string) {
   await collection(userId, COLLECTIONS.plaidItems).doc(itemId).set(
     { ...stampUpdate(), status: "error", error_code: code, error_message: message },
+    { merge: true }
+  );
+}
+
+export async function clearPlaidItemError(userId: string, itemId: string) {
+  await collection(userId, COLLECTIONS.plaidItems).doc(itemId).set(
+    { ...stampUpdate(), status: "connected", error_code: null, error_message: null },
     { merge: true }
   );
 }
