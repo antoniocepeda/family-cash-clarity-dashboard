@@ -150,28 +150,28 @@ export default function SpendingTrends() {
               ))}
             </select>
 
-            <div className="flex rounded-lg border border-[var(--line)] overflow-hidden">
+            <div className="segment">
               {(["weeks", "months"] as PeriodType[]).map((p) => (
                 <button
                   key={p}
+                  type="button"
                   onClick={() => setPeriod(p)}
-                  className={`text-xs font-medium px-3 py-1.5 transition-colors ${
-                    period === p ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--surface-3)]"
-                  }`}
+                  aria-pressed={period === p}
+                  className={`text-sm ${period === p ? "is-active" : ""}`}
                 >
                   {p === "weeks" ? "Weekly" : "Monthly"}
                 </button>
               ))}
             </div>
 
-            <div className="flex rounded-lg border border-[var(--line)] overflow-hidden">
+            <div className="segment">
               {(["4", "8", "12"] as RangeType[]).map((r) => (
                 <button
                   key={r}
+                  type="button"
                   onClick={() => setRange(r)}
-                  className={`text-xs font-medium px-3 py-1.5 transition-colors ${
-                    range === r ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--surface-3)]"
-                  }`}
+                  aria-pressed={range === r}
+                  className={`text-sm ${range === r ? "is-active" : ""}`}
                 >
                   {r} {period === "weeks" ? "wk" : "mo"}
                 </button>
@@ -189,13 +189,13 @@ export default function SpendingTrends() {
             <p className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">Avg Actual</p>
             <p className="text-sm font-bold text-[var(--text-secondary)] mt-1">{fmt(summaryStats.avgActual)}</p>
           </div>
-          <div className="rounded-lg bg-[var(--positive-soft)] p-3">
-            <p className="text-[10px] font-semibold text-[var(--positive)] uppercase tracking-wider">Under Budget</p>
-            <p className="text-sm font-bold text-[var(--positive)] mt-1">{fmt(summaryStats.totalUnder)}</p>
+          <div className="rounded-lg bg-[var(--surface-2)] p-3">
+            <p className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">Under budget</p>
+            <p className="mt-1 text-sm font-medium tabular-nums text-[var(--text)]">{fmt(summaryStats.totalUnder)}</p>
           </div>
-          <div className="rounded-lg bg-[var(--negative-soft)] p-3">
-            <p className="text-[10px] font-semibold text-[var(--negative)] uppercase tracking-wider">Over Budget</p>
-            <p className="text-sm font-bold text-[var(--negative)] mt-1">{fmt(summaryStats.totalOver)}</p>
+          <div className="rounded-lg bg-[var(--surface-2)] p-3">
+            <p className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">Over budget</p>
+            <p className="mt-1 text-sm font-medium tabular-nums text-[var(--text)]">{fmt(summaryStats.totalOver)}</p>
           </div>
         </div>
       </div>
@@ -208,19 +208,19 @@ export default function SpendingTrends() {
         <div className="px-5 pb-5">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 10, fill: "#9aa1ab" }}
+                tick={{ fontSize: 10, fill: "var(--chart-muted)" }}
                 tickLine={false}
-                axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+                axisLine={{ stroke: "var(--chart-grid)" }}
                 interval={0}
                 angle={-30}
                 textAnchor="end"
                 height={50}
               />
               <YAxis
-                tick={{ fontSize: 11, fill: "#9aa1ab" }}
+                tick={{ fontSize: 11, fill: "var(--chart-muted)" }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `$${v}`}
@@ -242,7 +242,7 @@ export default function SpendingTrends() {
                         <span className="text-[var(--accent)]">Actual:</span> {fmt(actual)}
                       </p>
                       {planned > 0 && (
-                        <p className={`text-xs font-semibold mt-1 ${diff > 0 ? "text-[var(--negative)]" : "text-[var(--positive)]"}`}>
+                        <p className="mt-1 text-xs font-medium text-[var(--text)]">
                           {diff > 0 ? "Over" : "Under"} by {fmt(Math.abs(diff))}
                         </p>
                       )}
@@ -256,8 +256,8 @@ export default function SpendingTrends() {
                   <span className="text-xs text-[var(--muted)] capitalize">{value}</span>
                 )}
               />
-              <Bar dataKey="planned" fill="#d5e2fb" radius={[3, 3, 0, 0]} name="Planned" />
-              <Bar dataKey="actual" fill="#f4f5f7" radius={[3, 3, 0, 0]} name="Actual" />
+              <Bar dataKey="planned" fill="var(--chart-planned)" radius={[3, 3, 0, 0]} name="Planned" />
+              <Bar dataKey="actual" fill="var(--chart-actual)" radius={[3, 3, 0, 0]} name="Actual" />
             </BarChart>
           </ResponsiveContainer>
         </div>

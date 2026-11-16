@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlaidItem } from "@/lib/types";
+import StatusDot from "@/components/ui/StatusDot";
 
 export default function LinkedBankCard({
   item,
@@ -17,18 +18,10 @@ export default function LinkedBankCard({
   const broken = item.status === "error";
 
   return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-3">
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-[var(--text)]">{name}</span>
-        <span
-          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-            broken
-              ? "bg-[var(--negative-soft)] text-[var(--negative)]"
-              : "bg-[var(--positive-soft)] text-[var(--positive)]"
-          }`}
-        >
-          {item.status}
-        </span>
+        <StatusDot tone={broken ? "negative" : "positive"} label={broken ? "Error" : "Connected"} />
       </div>
       <p className="mt-1 text-xs text-[var(--muted)]">
         {item.last_synced_at ? `Last synced ${new Date(item.last_synced_at).toLocaleString()}` : "Not synced yet"}
@@ -36,7 +29,7 @@ export default function LinkedBankCard({
       {broken && (item.error_code || item.error_message) && (
         <div className="mt-2 space-y-1">
           {item.error_code && (
-            <p className="font-mono text-[11px] font-semibold tracking-wide text-[var(--negative)]">{item.error_code}</p>
+            <p className="text-[11px] font-semibold tracking-wide text-[var(--negative)]">{item.error_code}</p>
           )}
           {item.error_message && <p className="text-xs text-[var(--negative)]">{item.error_message}</p>}
         </div>
@@ -47,7 +40,7 @@ export default function LinkedBankCard({
           onClick={() => onReconnect(item.item_id)}
           disabled={busy}
           aria-label={`Reconnect ${name}`}
-          className="btn btn-ghost mt-3 w-full"
+          className="btn btn-secondary mt-3 w-full"
         >
           {reconnecting ? "Opening..." : "Reconnect"}
         </button>

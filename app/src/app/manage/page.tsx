@@ -1,12 +1,16 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import LinkedBankCard from "@/components/LinkedBankCard";
 import Nav from "@/components/Nav";
+import ActivityRow from "@/components/ui/ActivityRow";
+import RowMenu from "@/components/ui/RowMenu";
+import StatusDot from "@/components/ui/StatusDot";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { Account, Commitment, PlaidAccount, PlaidStatus } from "@/lib/types";
+import { unpaidPastDueDate } from "@/lib/overdue";
+import { Account, Commitment, CommitmentWithInstances, PlaidAccount, PlaidStatus } from "@/lib/types";
 
 type LinkSession = { mode: "create" | "update"; itemId: string | null };
 type SyncErrorBody = { error?: string; errors?: { item_id?: string; error?: string }[] };
@@ -16,7 +20,7 @@ type Tab = "accounts" | "commitments" | "help";
 export default function ManagePage() {
   const [tab, setTab] = useState<Tab>("accounts");
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [commitments, setCommitments] = useState<CommitmentWithInstances[]>([]);
   const [plaidStatus, setPlaidStatus] = useState<PlaidStatus>({ items: [], accounts: [] });
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +31,7 @@ export default function ManagePage() {
       authFetch("/api/plaid/sync"),
     ]);
     setAccounts(await readJsonArray<Account>(acctRes, "Accounts fetch"));
-    setCommitments(await readJsonArray<Commitment>(cmtRes, "Commitments fetch"));
+    setCommitments(await readJsonArray<CommitmentWithInstances>(cmtRes, "Commitments fetch"));
     setPlaidStatus(await plaidRes.json());
     setLoading(false);
   }, []);
@@ -264,11 +268,11 @@ function AccountsManager({
             disabled={plaidBusy}
             className="btn btn-primary"
           >
-            Connect Bank
+            Connect bank
           </button>
           <button
             onClick={() => setAdding(!adding)}
-            className="btn btn-ghost"
+            className="btn btn-secondary"
           >
             {adding ? "Cancel" : "Add account"}
           </button>
@@ -342,7 +346,7 @@ function AccountsManager({
               <button
                 onClick={addAccount}
                 disabled={!newAcct.name}
-                className="px-4 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
+                className="btn btn-primary"
               >
                 Add
               </button>
@@ -351,81 +355,64 @@ function AccountsManager({
         </div>
       )}
 
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-sm overflow-hidden">
-        <table className="data-list w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--line)] bg-[var(--surface-2)]">
-              <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Name</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Type</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Balance</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Reserve</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Updated</th>
-              <th className="px-5 py-3 text-right text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--line)]">
-            {accounts.map((acct) =>
-              editing === acct.id ? (
-                <tr key={acct.id} className="bg-[var(--warning-soft)]">
-                  <td className="px-5 py-2">
-                    <input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" />
-                  </td>
-                  <td className="px-5 py-2">
-                    <select value={form.type || "checking"} onChange={(e) => setForm({ ...form, type: e.target.value as Account["type"] })} className="rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]">
-                      <option value="checking">Checking</option>
-                      <option value="savings">Savings</option>
-                      <option value="cash">Cash</option>
-                      <option value="credit">Credit</option>
-                    </select>
-                  </td>
-                  <td className="px-5 py-2">
-                    <input type="number" value={form.current_balance ?? 0} onChange={(e) => setForm({ ...form, current_balance: parseFloat(e.target.value) })} step="0.01" className="w-28 rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" />
-                  </td>
-                  <td className="px-5 py-2">
-                    <input type="checkbox" checked={!!form.is_reserve} onChange={(e) => setForm({ ...form, is_reserve: e.target.checked ? 1 : 0 })} className="rounded border-[var(--line-strong)]" />
-                  </td>
-                  <td className="px-5 py-2 text-xs text-[var(--muted)]">—</td>
-                  <td className="px-5 py-2 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={saveEdit} className="px-3 py-1 text-xs font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 transition-colors">Save</button>
-                      <button onClick={() => setEditing(null)} className="px-3 py-1 text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] transition-colors">Cancel</button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={acct.id} className="hover:bg-[var(--surface-3)] transition-colors">
-                  <td className="px-5 py-3 font-medium text-[var(--text)]" data-label="">{acct.name}</td>
-                  <td className="px-5 py-3 capitalize text-[var(--text-secondary)]" data-label="Type">{acct.type}</td>
-                  <td className="px-5 py-3 font-semibold text-[var(--text)] tabular-nums" data-label="Balance">
-                    <p>${acct.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}{acct.available_balance != null ? <span className="ml-1 text-xs font-normal text-[var(--muted)]">posted</span> : null}</p>
+      <div className="surface overflow-hidden">
+        {accounts.length === 0 && (
+          <p className="px-5 py-8 text-center text-sm text-[var(--muted)]">No accounts yet. Add your first account above.</p>
+        )}
+        <div className="activity-list">
+          {accounts.map((acct) =>
+            editing === acct.id ? (
+              <div key={acct.id} className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-2)] p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Account name" />
+                  <select value={form.type || "checking"} onChange={(e) => setForm({ ...form, type: e.target.value as Account["type"] })} aria-label="Account type">
+                    <option value="checking">Checking</option>
+                    <option value="savings">Savings</option>
+                    <option value="cash">Cash</option>
+                    <option value="credit">Credit</option>
+                  </select>
+                  <input type="number" value={form.current_balance ?? 0} onChange={(e) => setForm({ ...form, current_balance: parseFloat(e.target.value) })} step="0.01" aria-label="Balance" />
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <input type="checkbox" checked={!!form.is_reserve} onChange={(e) => setForm({ ...form, is_reserve: e.target.checked ? 1 : 0 })} />
+                    Reserve
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className="btn btn-primary">Save</button>
+                  <button onClick={() => setEditing(null)} className="btn btn-secondary">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <ActivityRow
+                key={acct.id}
+                title={acct.name}
+                amount={`$${acct.current_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                subtitle={
+                  <>
+                    <span className="capitalize">{acct.type}</span>
+                    {acct.available_balance != null ? <span>· Posted</span> : null}
+                    <span>· Updated {new Date(acct.updated_at).toLocaleDateString()}</span>
                     {acct.available_balance != null && (
-                      <p className="text-xs font-normal text-[var(--muted)]">
-                        {acct.type === "credit" ? "Credit left" : "Available"} ${acct.available_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </p>
+                      <span>
+                        · {acct.type === "credit" ? "Credit left" : "Available"} ${acct.available_balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </span>
                     )}
-                  </td>
-                  <td className="px-5 py-3" data-label="Reserve">
-                    {acct.is_reserve ? (
-                      <span className="text-xs font-medium bg-[var(--warning-soft)] text-[var(--warning)] px-2 py-0.5 rounded-full">Reserve</span>
-                    ) : (
-                      <span className="text-xs text-[var(--muted)]">—</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3 text-xs text-[var(--muted)]" data-label="Updated">{new Date(acct.updated_at).toLocaleDateString()}</td>
-                  <td className="px-5 py-3 text-right" data-label="">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => startEdit(acct)} className="px-3 py-1 text-xs font-medium text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent-soft)] transition-colors">Edit</button>
-                      <button onClick={() => deleteAccount(acct.id)} className="px-3 py-1 text-xs font-medium text-[var(--negative)] bg-[var(--negative-soft)] rounded-lg hover:bg-[var(--negative-soft)] transition-colors">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            )}
-            {accounts.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-[var(--muted)]">No accounts yet. Add your first account above.</td></tr>
-            )}
-          </tbody>
-        </table>
+                    {acct.is_reserve ? <StatusDot tone="warning" label="Reserve" /> : null}
+                  </>
+                }
+                trailing={
+                  <RowMenu
+                    label={`Actions for ${acct.name}`}
+                    items={[
+                      { label: "Edit", onSelect: () => startEdit(acct) },
+                      { label: "Delete", tone: "danger", onSelect: () => deleteAccount(acct.id) },
+                    ]}
+                  />
+                }
+              />
+            )
+          )}
+        </div>
       </div>
     </div>
   );
@@ -439,7 +426,7 @@ function CommitmentsManager({
   plaidAccounts,
   onRefresh,
 }: {
-  commitments: Commitment[];
+  commitments: CommitmentWithInstances[];
   accounts: Account[];
   plaidAccounts: PlaidAccount[];
   onRefresh: () => void;
@@ -560,8 +547,8 @@ function CommitmentsManager({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-[var(--text)]">Bills &amp; Income</h2>
-        <button onClick={() => setAdding(!adding)} className="text-sm font-medium text-[var(--accent)] hover:text-[var(--text)] transition-colors">
-          {adding ? "Cancel" : "+ Add Expense"}
+        <button onClick={() => setAdding(!adding)} className="btn btn-secondary">
+          {adding ? "Cancel" : "Add expense"}
         </button>
       </div>
 
@@ -642,127 +629,114 @@ function CommitmentsManager({
             </div>
           )}
           <div>
-            <button onClick={addCommitment} disabled={!newCmt.name || !newCmt.amount || (newCmt.recurrence_rule === "custom" && !customValue)} className="px-4 py-2 text-sm font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors">
-              Add Expense
+            <button onClick={addCommitment} disabled={!newCmt.name || !newCmt.amount || (newCmt.recurrence_rule === "custom" && !customValue)} className="btn btn-primary">
+              Add expense
             </button>
           </div>
         </div>
       )}
 
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-list w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--line)] bg-[var(--surface-2)]">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Due Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Recurrence</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {sorted.map((cmt) =>
-                editing === cmt.id ? (
-                  <Fragment key={cmt.id}>
-                  <tr className="bg-[var(--warning-soft)]">
-                    <td className="px-4 py-2"><input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" /></td>
-                    <td className="px-4 py-2"><select value={form.type || "bill"} onChange={(e) => setForm({ ...form, type: e.target.value as "income" | "bill" })} className="rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"><option value="bill">Bill</option><option value="income">Income</option></select></td>
-                    <td className="px-4 py-2"><input type="number" value={form.amount ?? 0} onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) })} step="0.01" className="w-24 rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" /></td>
-                    <td className="px-4 py-2"><input type="date" value={form.due_date || ""} onChange={(e) => setForm({ ...form, due_date: e.target.value })} className="rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]" /></td>
-                    <td className="px-4 py-2">
-                      <select value={isCustomRule(form.recurrence_rule) ? "custom" : (form.recurrence_rule || "")} onChange={(e) => { const v = e.target.value; setForm({ ...form, recurrence_rule: v === "custom" ? "custom" : (v || null) }); if (v !== "custom") { setEditCustomValue(""); setEditCustomUnit("days"); } }} className="rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]">
-                        <option value="">One-time</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option><option value="custom">Custom</option>
-                      </select>
-                      {form.recurrence_rule && (
-                        <div className="mt-1 space-y-1">
-                          <input type="date" aria-label="End date" value={form.recurrence_end_date || ""} onChange={(e) => setForm({ ...form, recurrence_end_date: e.target.value || null })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]" />
-                          <input type="number" min="1" step="1" aria-label="Stop after this many" placeholder="No limit" value={form.recurrence_count ?? ""} onChange={(e) => setForm({ ...form, recurrence_count: e.target.value ? Number(e.target.value) : null })} className="w-full rounded border border-[var(--line-strong)] px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]" />
-                        </div>
-                      )}
-                      {(form.recurrence_rule === "custom" || isCustomRule(form.recurrence_rule)) && (
-                        <div className="flex gap-1 mt-1">
-                          <input type="number" value={editCustomValue} onChange={(e) => setEditCustomValue(e.target.value)} placeholder="#" min="1" step="1" className="w-16 rounded border border-[var(--line-strong)] px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]" />
-                          <select value={editCustomUnit} onChange={(e) => setEditCustomUnit(e.target.value as "days" | "weeks")} className="rounded border border-[var(--line-strong)] px-1 py-1 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]">
-                            <option value="days">days</option>
-                            <option value="weeks">wks</option>
-                          </select>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={saveEdit} className="px-3 py-1 text-xs font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 transition-colors">Save</button>
-                        <button onClick={() => setEditing(null)} className="px-3 py-1 text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] transition-colors">Cancel</button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr className="bg-[var(--warning-soft)]">
-                    <td colSpan={6} className="px-4 py-2">
-                      <label className="block text-xs font-medium text-[var(--text-secondary)]">
-                        Bank statement name
-                        <input
-                          value={bankTagDraft}
-                          onChange={(e) => setBankTagDraft(e.target.value)}
-                          placeholder="Xfinity, COMCAST"
-                          aria-label="Bank statement name"
-                          className="mt-1 min-h-11 w-full rounded border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                        />
-                      </label>
-                      <label className="mt-3 block text-xs font-medium text-[var(--text-secondary)]">
-                        Card or account
-                        <select
-                          value={accountHintDraft}
-                          onChange={(e) => setAccountHintDraft(e.target.value)}
-                          aria-label="Card or account"
-                          className="mt-1 min-h-11 w-full rounded border border-[var(--line-strong)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                        >
-                          <option value="">Any account</option>
-                          {accountHintDraft && !accounts.some((account) => account.id === accountHintDraft) && (
-                            <option value={accountHintDraft}>{accountHintDraft}</option>
-                          )}
-                          {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>{accountLabel(account)}</option>
-                          ))}
+      <div className="surface overflow-hidden">
+        {commitments.length === 0 && (
+          <p className="px-5 py-8 text-center text-sm text-[var(--muted)]">No expenses yet. Add your first bill or income above.</p>
+        )}
+        <div className="activity-list">
+          {sorted.map((cmt) => {
+            const today = new Date().toLocaleDateString("en-CA");
+            const overdueDate = unpaidPastDueDate(cmt, today);
+            if (editing === cmt.id) {
+              return (
+                <div key={cmt.id} className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-2)] p-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Expense name" />
+                    <select value={form.type || "bill"} onChange={(e) => setForm({ ...form, type: e.target.value as "income" | "bill" })} aria-label="Type">
+                      <option value="bill">Bill</option>
+                      <option value="income">Income</option>
+                    </select>
+                    <input type="number" value={form.amount ?? 0} onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) })} step="0.01" aria-label="Amount" />
+                    <input type="date" value={form.due_date || ""} onChange={(e) => setForm({ ...form, due_date: e.target.value })} aria-label="Due date" />
+                    <select value={isCustomRule(form.recurrence_rule) ? "custom" : (form.recurrence_rule || "")} onChange={(e) => { const v = e.target.value; setForm({ ...form, recurrence_rule: v === "custom" ? "custom" : (v || null) }); if (v !== "custom") { setEditCustomValue(""); setEditCustomUnit("days"); } }} aria-label="Recurrence">
+                      <option value="">One-time</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option><option value="custom">Custom</option>
+                    </select>
+                    {form.recurrence_rule && (
+                      <>
+                        <input type="date" aria-label="End date" value={form.recurrence_end_date || ""} onChange={(e) => setForm({ ...form, recurrence_end_date: e.target.value || null })} />
+                        <input type="number" min="1" step="1" aria-label="Stop after this many" placeholder="No limit" value={form.recurrence_count ?? ""} onChange={(e) => setForm({ ...form, recurrence_count: e.target.value ? Number(e.target.value) : null })} />
+                      </>
+                    )}
+                    {(form.recurrence_rule === "custom" || isCustomRule(form.recurrence_rule)) && (
+                      <div className="flex gap-2">
+                        <input type="number" value={editCustomValue} onChange={(e) => setEditCustomValue(e.target.value)} placeholder="#" min="1" step="1" aria-label="Custom interval" />
+                        <select value={editCustomUnit} onChange={(e) => setEditCustomUnit(e.target.value as "days" | "weeks")} aria-label="Custom interval unit">
+                          <option value="days">days</option>
+                          <option value="weeks">wks</option>
                         </select>
-                      </label>
-                    </td>
-                  </tr>
-                  </Fragment>
-                ) : (
-                  <tr key={cmt.id} className={`hover:bg-[var(--surface-3)] transition-colors ${cmt.paid ? "opacity-50" : ""}`}>
-                    <td className="px-4 py-3" data-label="">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full shrink-0 ${cmt.type === "income" ? "bg-[var(--positive)]" : "bg-[var(--negative)]"}`} />
-                        <span className="font-medium text-[var(--text)]">{cmt.name}</span>
-                        {cmt.paid === 1 && (<span className="text-[10px] font-medium bg-[var(--surface-3)] text-[var(--muted)] px-1.5 py-0.5 rounded">PAID</span>)}
                       </div>
-                      {(cmt.bank_match_tags ?? []).length > 0 && (
-                        <p className="mt-1 text-[11px] text-[var(--muted)]">Statement: {cmt.bank_match_tags?.join(", ")}</p>
+                    )}
+                  </div>
+                  <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                    Bank statement name
+                    <input
+                      value={bankTagDraft}
+                      onChange={(e) => setBankTagDraft(e.target.value)}
+                      placeholder="Xfinity, COMCAST"
+                      aria-label="Bank statement name"
+                      className="mt-1 w-full"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                    Card or account
+                    <select
+                      value={accountHintDraft}
+                      onChange={(e) => setAccountHintDraft(e.target.value)}
+                      aria-label="Card or account"
+                      className="mt-1 w-full"
+                    >
+                      <option value="">Any account</option>
+                      {accountHintDraft && !accounts.some((account) => account.id === accountHintDraft) && (
+                        <option value={accountHintDraft}>{accountHintDraft}</option>
                       )}
-                      {cmt.account_hint && (
-                        <p className="mt-1 text-[11px] text-[var(--muted)]">Card: {hintLabel(cmt.account_hint)}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 capitalize text-[var(--text-secondary)]" data-label="Type">{cmt.type}</td>
-                    <td className="px-4 py-3 font-semibold tabular-nums text-[var(--text)]" data-label="Amount">{cmt.type === "income" ? "+" : "−"}${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]" data-label="Due">{cmt.due_date}</td>
-                    <td className="px-4 py-3 capitalize text-[var(--muted)]" data-label="Repeats">{formatRecurrence(cmt.recurrence_rule, cmt.recurrence_end_date, cmt.recurrence_count)}</td>
-                    <td className="px-4 py-3 text-right" data-label="">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => startEdit(cmt)} className="px-3 py-1 text-xs font-medium text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent-soft)] transition-colors">Edit</button>
-                        <button onClick={() => deleteCommitment(cmt.id)} className="px-3 py-1 text-xs font-medium text-[var(--negative)] bg-[var(--negative-soft)] rounded-lg hover:bg-[var(--negative-soft)] transition-colors">Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              )}
-              {commitments.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-[var(--muted)]">No expenses yet. Add your first bill or income above.</td></tr>
-              )}
-            </tbody>
-          </table>
+                      {accounts.map((account) => (
+                        <option key={account.id} value={account.id}>{accountLabel(account)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex gap-2">
+                    <button onClick={saveEdit} className="btn btn-primary">Save</button>
+                    <button onClick={() => setEditing(null)} className="btn btn-secondary">Cancel</button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <ActivityRow
+                key={cmt.id}
+                title={cmt.name}
+                tone={cmt.type === "income" ? "in" : overdueDate ? "overdue" : "neutral"}
+                amount={`${cmt.type === "income" ? "+" : "−"}$${cmt.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                subtitle={
+                  <>
+                    <span className="capitalize">{cmt.type}</span>
+                    <span className={overdueDate ? "is-overdue-text" : undefined}>· Due {overdueDate ?? cmt.due_date}</span>
+                    <span>· {formatRecurrence(cmt.recurrence_rule, cmt.recurrence_end_date, cmt.recurrence_count)}</span>
+                    {(cmt.bank_match_tags ?? []).length > 0 && <span>· Statement {cmt.bank_match_tags?.join(", ")}</span>}
+                    {cmt.account_hint && <span>· Card {hintLabel(cmt.account_hint)}</span>}
+                    {cmt.paid === 1 && <StatusDot tone="neutral" label="Paid" />}
+                    {overdueDate && <StatusDot tone="negative" label="Overdue" />}
+                  </>
+                }
+                trailing={
+                  <RowMenu
+                    label={`Actions for ${cmt.name}`}
+                    items={[
+                      { label: "Edit", onSelect: () => startEdit(cmt) },
+                      { label: "Delete", tone: "danger", onSelect: () => deleteCommitment(cmt.id) },
+                    ]}
+                  />
+                }
+              />
+            );
+          })}
         </div>
       </div>
     </div>
@@ -782,22 +756,25 @@ function ResetDataCard({ onRefresh }: { onRefresh: () => void }) {
   };
 
   return (
-    <div className="rounded-2xl border-2 border-dashed border-[color-mix(in_srgb,var(--negative)_35%,transparent)] bg-[var(--negative-soft)] p-6 space-y-3">
-      <h3 className="text-lg font-semibold text-[var(--negative)]">Reset Data</h3>
-      <p className="text-sm text-[var(--negative)]">Type <strong>RESET</strong> to clear all accounts, expenses, and alerts.</p>
+    <div className="surface space-y-3 p-6">
       <div className="flex items-center gap-2">
+        <StatusDot tone="negative" label="Reset data" />
+      </div>
+      <p className="text-sm text-[var(--muted)]">Type <strong>RESET</strong> to clear all accounts, expenses, and alerts.</p>
+      <div className="flex flex-wrap items-center gap-2">
         <input
           value={confirmText}
           onChange={(e) => setConfirmText(e.target.value)}
-          placeholder='Type "RESET"'
-          className="rounded-lg border border-[color-mix(in_srgb,var(--negative)_45%,transparent)] px-3 py-2 text-sm w-36 outline-none focus:ring-2 focus:ring-[var(--negative)]"
+          placeholder="Type RESET"
+          aria-label="Type RESET to confirm"
+          className="w-40"
         />
         <button
           onClick={handleReset}
           disabled={confirmText !== "RESET"}
-          className="px-4 py-2 text-sm font-semibold text-[var(--negative)] bg-[var(--danger-fill)] rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="btn btn-danger"
         >
-          Clear Everything
+          Clear everything
         </button>
       </div>
     </div>
@@ -809,9 +786,9 @@ function ResetDataCard({ onRefresh }: { onRefresh: () => void }) {
 function HelpGuide({ onRefresh }: { onRefresh: () => void }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-br from-[var(--surface-3)] to-[var(--bg)] p-6 text-white shadow-lg">
-        <h2 className="text-xl font-bold">Welcome to Cash Clarity</h2>
-        <p className="mt-1 text-[var(--muted)] text-sm leading-relaxed max-w-2xl">
+      <div className="surface p-6">
+        <h2 className="text-xl font-medium">Welcome to Cash Clarity</h2>
+        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
           This dashboard helps your family see exactly where your cash stands — not just today,
           but 28 days out. No guessing, no surprises. Check the Expenses tab to manage your
           bills and income, or visit the Dashboard for a full overview.

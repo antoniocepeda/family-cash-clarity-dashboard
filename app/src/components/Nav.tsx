@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const links = [
   { href: "/", label: "Home" },
@@ -34,7 +35,7 @@ export default function Nav() {
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
-                  className={`rounded-full px-3 py-2 text-sm transition-colors lg:px-4 lg:text-base ${
+                  className={`nav-link rounded-full px-3 py-2 text-sm transition-colors lg:px-4 lg:text-base ${
                     active
                       ? "text-[var(--text)]"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -48,11 +49,12 @@ export default function Nav() {
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
+          <ThemeToggle />
           {user?.email && (
             <span className="max-w-40 truncate text-xs text-[var(--muted)]">{user.email}</span>
           )}
           {user ? (
-            <button type="button" onClick={() => void signOutUser()} className="btn btn-ghost">
+            <button type="button" onClick={() => void signOutUser()} className="btn btn-secondary">
               Sign out
             </button>
           ) : (
@@ -63,6 +65,7 @@ export default function Nav() {
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
+          <ThemeToggle />
           {!user && (
             <Link href={`/login?next=${encodeURIComponent(pathname)}`} className="btn btn-primary px-4">
               Sign in

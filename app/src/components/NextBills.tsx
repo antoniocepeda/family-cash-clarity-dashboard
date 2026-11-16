@@ -42,10 +42,10 @@ export default function NextBills({ commitments }: Props) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-[var(--text)]">Next 7 Days</h2>
         <div className="flex items-center gap-4 text-sm">
-          <span className="text-[var(--negative)] font-semibold">
+          <span className="font-medium tabular-nums text-[var(--text)]">
             −${totalBillsDue.toLocaleString("en-US", { minimumFractionDigits: 2 })} out
           </span>
-          <span className="text-[var(--positive)] font-semibold">
+          <span className="font-medium tabular-nums text-[var(--positive)]">
             +${totalIncome.toLocaleString("en-US", { minimumFractionDigits: 2 })} in
           </span>
         </div>
@@ -62,24 +62,19 @@ export default function NextBills({ commitments }: Props) {
                 key={item.id}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-[var(--surface-3)] transition-colors"
               >
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg text-white text-xs font-bold ${
-                    item.type === "income"
-                      ? "bg-[var(--positive)]"
-                      : "bg-[var(--negative)]"
-                  }`}
-                >
-                  {daysUntil <= 0 ? "!" : `${daysUntil}d`}
+                <div className="activity-mark">
+                  {item.name.trim().charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--text)] truncate">{item.name}</p>
-                  <p className="text-xs text-[var(--muted)]">
+                  <p className={`text-xs ${daysUntil < 0 ? "is-overdue-text" : "text-[var(--muted)]"}`}>
                     {format(parseISO(item.due_date), "EEE, MMM d")}
+                    {daysUntil < 0 ? " · Overdue" : ""}
                   </p>
                 </div>
                 <span
-                  className={`text-sm font-semibold tabular-nums ${
-                    item.type === "income" ? "text-[var(--positive)]" : "text-[var(--text)]"
+                  className={`text-sm font-medium tabular-nums ${
+                    item.type === "income" ? "text-[var(--positive)]" : daysUntil < 0 ? "is-overdue-text" : "text-[var(--text)]"
                   }`}
                 >
                   {item.type === "income" ? "+" : "−"}$

@@ -13,6 +13,7 @@ import {
   ReferenceArea,
 } from "recharts";
 import { format, parseISO } from "date-fns";
+import StatusDot from "@/components/ui/StatusDot";
 
 type TimeRange = 14 | 30 | 60 | 90 | 120 | 150 | 180;
 
@@ -73,7 +74,7 @@ export default function ProjectionChart({
       monthBands.push({
         startIdx: bandStart,
         endIdx: i - 1,
-        fill: monthBands.length % 2 === 0 ? "rgba(255,255,255,0.025)" : "rgba(213,226,251,0.04)",
+        fill: monthBands.length % 2 === 0 ? "transparent" : "var(--chart-band)",
       });
       bandStart = i;
     }
@@ -83,7 +84,7 @@ export default function ProjectionChart({
     monthBands.push({
       startIdx: bandStart,
       endIdx: data.length - 1,
-      fill: monthBands.length % 2 === 0 ? "rgba(255,255,255,0.025)" : "rgba(213,226,251,0.04)",
+        fill: monthBands.length % 2 === 0 ? "transparent" : "var(--chart-band)",
     });
   }
 
@@ -110,14 +111,10 @@ export default function ProjectionChart({
             </label>
           )}
           {hasNegative && dangerDay && (
-            <span className="text-xs font-semibold text-[var(--negative)] bg-[var(--negative-soft)] px-2.5 py-1 rounded-full">
-              Goes negative {format(parseISO(dangerDay.date), "MMM d")}
-            </span>
+            <StatusDot tone="warning" label={`Goes negative ${format(parseISO(dangerDay.date), "MMM d")}`} />
           )}
           {hasNegative && (
-            <span className="text-xs font-semibold text-[var(--negative)] bg-[var(--negative-soft)] px-2.5 py-1 rounded-full">
-              Needs {fmt(Math.abs(lowDay.balance))} by {format(parseISO(lowDay.date), "MMM d")}
-            </span>
+            <StatusDot tone="warning" label={`Needs ${fmt(Math.abs(lowDay.balance))} by ${format(parseISO(lowDay.date), "MMM d")}`} />
           )}
         </div>
         {onDaysChange && (
@@ -149,12 +146,8 @@ export default function ProjectionChart({
         <AreaChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
           <defs>
             <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#d5e2fb" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#d5e2fb" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="dangerGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f0b4b4" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#f0b4b4" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--chart-line)" stopOpacity={0.22} />
+              <stop offset="95%" stopColor="var(--chart-line)" stopOpacity={0} />
             </linearGradient>
           </defs>
           {monthBands.map((band, i) => (
@@ -168,16 +161,16 @@ export default function ProjectionChart({
               fillOpacity={0.65}
             />
           ))}
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
           <XAxis
             dataKey="shortDate"
-            tick={{ fontSize: 11, fill: "#9aa1ab" }}
+            tick={{ fontSize: 11, fill: "var(--chart-muted)" }}
             tickLine={false}
-            axisLine={{ stroke: "rgba(255,255,255,0.08)" }}
+            axisLine={{ stroke: "var(--chart-grid)" }}
             interval="preserveStartEnd"
           />
           <YAxis
-            tick={{ fontSize: 11, fill: "#9aa1ab" }}
+            tick={{ fontSize: 11, fill: "var(--chart-muted)" }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
@@ -191,7 +184,7 @@ export default function ProjectionChart({
               return (
                 <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3 shadow-lg text-sm">
                   <p className="font-semibold text-[var(--text-secondary)]">{d.dateLabel}</p>
-                  <p className={`text-lg font-bold ${d.balance < 0 ? "text-[var(--negative)]" : "text-[var(--positive)]"}`}>
+                  <p className="text-lg font-medium tabular-nums text-[var(--text)]">
                     {fmt(d.balance)}
                   </p>
                   {d.commitments.length > 0 && (
@@ -207,16 +200,16 @@ export default function ProjectionChart({
               );
             }}
           />
-          <ReferenceLine y={0} stroke="#f0b4b4" strokeDasharray="4 4" strokeWidth={1} />
-          <ReferenceLine y={500} stroke="#e6c98a" strokeDasharray="3 3" strokeWidth={1} label="" />
+          <ReferenceLine y={0} stroke="var(--chart-zero)" strokeDasharray="4 4" strokeWidth={1} />
+          <ReferenceLine y={500} stroke="var(--chart-buffer)" strokeDasharray="3 3" strokeWidth={1} label="" />
           <Area
             type="monotone"
             dataKey="balance"
-            stroke="#d5e2fb"
+            stroke="var(--chart-line)"
             strokeWidth={1.75}
             fill="url(#balanceGradient)"
             dot={false}
-            activeDot={{ r: 4, fill: "#d5e2fb", stroke: "#090a0c", strokeWidth: 2 }}
+            activeDot={{ r: 4, fill: "var(--chart-line)", stroke: "var(--surface)", strokeWidth: 2 }}
             isAnimationActive={false}
           />
         </AreaChart>
@@ -224,10 +217,10 @@ export default function ProjectionChart({
       </div>
       <div className="flex items-center gap-4 mt-3 text-xs text-[var(--muted)]">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-px w-4 bg-[var(--negative)]" /> $0 line
+          <span className="inline-block h-px w-4 bg-[var(--chart-zero)]" /> $0 line
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-px w-4 bg-[var(--warning)]" /> $500 buffer
+          <span className="inline-block h-px w-4 bg-[var(--chart-buffer)]" /> $500 buffer
         </span>
       </div>
     </div>

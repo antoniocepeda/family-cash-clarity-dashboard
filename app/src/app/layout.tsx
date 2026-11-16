@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import AuthGate from "@/components/auth/AuthGate";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import MobileTabs from "@/components/MobileTabs";
+import { themeBootScript } from "@/lib/theme";
 import "./globals.css";
 
 const geist = Geist({
@@ -22,13 +23,13 @@ export const metadata: Metadata = {
   description: "Know your cash position at a glance. Track bills, income, and projections.",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "Clarity",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#090a0c",
+  themeColor: "#f7f7f5",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -40,7 +41,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body className="antialiased min-h-screen flex flex-col">
         <AuthProvider>
           <div className="flex-1 flex flex-col">

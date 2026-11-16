@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import ActivityRow from "@/components/ui/ActivityRow";
+import RowMenu from "@/components/ui/RowMenu";
+import StatusDot from "@/components/ui/StatusDot";
 import { CommitmentInstance, LedgerEntry, LedgerItem } from "@/lib/types";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, isWithinInterval } from "date-fns";
 
@@ -433,27 +436,27 @@ export default function LedgerStatement({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by description or expense..."
-            className="w-full sm:w-72 rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] outline-none"
+            className="field w-full sm:w-72"
           />
         </div>
 
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <div className="segment mt-3">
           {(["all", "pending", "posted"] as PendingFilter[]).map((f) => (
             <button
               key={f}
+              type="button"
+              aria-pressed={pendingFilter === f}
               onClick={() => {
                 setPendingFilter(f);
                 if (f === "pending") setDateFilter("all");
               }}
-              className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                pendingFilter === f
-                  ? "bg-[var(--warning-soft)] text-[var(--warning)]"
-                  : "bg-[var(--surface-2)] text-[var(--muted)] hover:bg-[var(--surface-3)]"
-              }`}
+              className={`text-sm ${pendingFilter === f ? "is-active" : ""}`}
             >
-              {f === "all" ? "All statuses" : f === "pending" ? "Pending only" : "Posted only"}
+              {f === "all" ? "All" : f === "pending" ? "Pending" : "Posted"}
             </button>
           ))}
+        </div>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-[var(--muted)]">
             Pending in ledger: <span className="font-semibold">{pendingCount}</span>
             {pendingCount > 0 ? " · matched to bills only after they post" : ""}
@@ -467,11 +470,11 @@ export default function LedgerStatement({
           </div>
           <div>
             <p className="eyebrow">Out</p>
-            <p className="money mt-1 text-base text-[var(--negative)]">-${totals.expense.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+            <p className="money mt-1 text-base text-[var(--text)]">−${totals.expense.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
             <p className="eyebrow">Net</p>
-            <p className={`money mt-1 text-base ${totals.net >= 0 ? "text-[var(--text)]" : "text-[var(--negative)]"}`}>
+            <p className="money mt-1 text-base text-[var(--text)]">
               {totals.net >= 0 ? "+" : "-"}${Math.abs(totals.net).toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </p>
           </div>
@@ -483,254 +486,117 @@ export default function LedgerStatement({
           No transactions found for this period.
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="data-list w-full text-sm">
-            <thead>
-              <tr className="border-y border-[var(--line)] bg-[var(--surface-2)]">
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Date</th>
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Description</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Amount</th>
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Account</th>
-                <th className="px-5 py-2.5 text-left text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Linked Expenses</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Running</th>
-                <th className="px-5 py-2.5 text-right text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {filtered.map((entry) => {
-                const allocations = entry.allocations || [];
-                const items: LedgerItem[] = entry.items || [];
-                const isEditing = editingId === entry.id;
-                const isLoading = actionLoading === entry.id;
-                const hasMultipleItems = items.length > 1;
-                const isExpanded = expandedIds.has(entry.id);
-                const isBillPayment = !!entry.commitment_id;
+        <div className="activity-list">
+          {filtered.map((entry) => {
+            const allocations = entry.allocations || [];
+            const items: LedgerItem[] = entry.items || [];
+            const isEditing = editingId === entry.id;
+            const isLoading = actionLoading === entry.id;
+            const hasMultipleItems = items.length > 1;
+            const isExpanded = expandedIds.has(entry.id);
+            const isBillPayment = !!entry.commitment_id;
+            const commitmentNames = allocations
+              .map((a) => ("commitment_name" in a ? (a as { commitment_name: string }).commitment_name : ""))
+              .filter(Boolean);
 
-                const toggleExpand = () => {
-                  setExpandedIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(entry.id)) next.delete(entry.id);
-                    else next.add(entry.id);
-                    return next;
-                  });
-                };
+            const toggleExpand = () => {
+              setExpandedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(entry.id)) next.delete(entry.id);
+                else next.add(entry.id);
+                return next;
+              });
+            };
 
-                if (isEditing) {
-                  return (
-                    <tr key={entry.id} className="bg-[var(--warning-soft)]">
-                      <td className="px-5 py-2 text-[var(--text-secondary)] whitespace-nowrap">
+            if (isEditing) {
+              return (
+                <div key={entry.id} className="activity-edit space-y-3">
+                  <p className="text-sm text-[var(--muted)]">{format(parseISO(entry.date), "MMM d, yyyy")}</p>
+                  <input
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    aria-label="Description"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={editForm.type}
+                      onChange={(e) => setEditForm({ ...editForm, type: e.target.value as "expense" | "income" })}
+                      aria-label="Type"
+                    >
+                      <option value="expense">Spent</option>
+                      <option value="income">Income</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                      step="0.01"
+                      aria-label="Amount"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveEdit} disabled={isLoading} className="btn btn-primary">
+                      {isLoading ? "Saving..." : "Save"}
+                    </button>
+                    <button onClick={cancelEdit} disabled={isLoading} className="btn btn-secondary">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <React.Fragment key={entry.id}>
+                <ActivityRow
+                  title={entry.description}
+                  tone={entry.type === "income" ? "in" : "neutral"}
+                  amount={`${entry.type === "income" ? "+" : "−"}$${entry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                  subtitle={
+                    <>
+                      <span>
                         {format(parseISO(entry.date), "MMM d, yyyy")}
-                      </td>
-                      <td className="px-5 py-2">
-                        <input
-                          value={editForm.description}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          className="w-full rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                        />
-                      </td>
-                      <td className="px-5 py-2">
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <select
-                            value={editForm.type}
-                            onChange={(e) => setEditForm({ ...editForm, type: e.target.value as "expense" | "income" })}
-                            className="rounded border border-[var(--line-strong)] px-1.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                          >
-                            <option value="expense">Spent</option>
-                            <option value="income">Income</option>
-                          </select>
-                          <input
-                            type="number"
-                            value={editForm.amount}
-                            onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                            step="0.01"
-                            className="w-24 rounded border border-[var(--line-strong)] px-2 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                          />
-                        </div>
-                      </td>
-                      <td className="px-5 py-2 text-[var(--muted)] whitespace-nowrap">
+                        {" · "}
                         {accountMap[entry.account_id] || entry.account_id}
-                      </td>
-                      <td className="px-5 py-2 text-xs text-[var(--muted)]">--</td>
-                      <td className="px-5 py-2 text-xs text-[var(--muted)]">--</td>
-                      <td className="px-5 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={saveEdit}
-                            disabled={isLoading}
-                            className="px-3 py-1 text-xs font-semibold text-[var(--ink)] bg-[var(--text)] rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors"
-                          >
-                            {isLoading ? "..." : "Save"}
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            disabled={isLoading}
-                            className="px-3 py-1 text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }
-
-                const commitmentNames = allocations
-                  .map((a) => ("commitment_name" in a ? (a as { commitment_name: string }).commitment_name : ""))
-                  .filter(Boolean);
-
-                const singleItemDesc = items.length === 1 ? items[0].description : null;
-
-                return (
-                  <React.Fragment key={entry.id}>
-                    <tr className="hover:bg-[var(--surface-3)] transition-colors group">
-                      <td className="px-5 py-3 text-[var(--text-secondary)] whitespace-nowrap" data-label="Date">
-                        {format(parseISO(entry.date), "MMM d, yyyy")}
-                      </td>
-                      <td className="px-5 py-3" data-label="">
-                        <div className="flex items-start gap-1.5">
-                          {hasMultipleItems && (
-                            <button
-                              onClick={toggleExpand}
-                              className="mt-0.5 shrink-0 text-[var(--muted)] hover:text-[var(--text)] transition-colors"
-                              title={isExpanded ? "Collapse items" : "Expand items"}
-                            >
-                              <svg
-                                className={`h-4 w-4 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          )}
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-medium text-[var(--text)]">{entry.description}</span>
-                              {entry.pending && (
-                                <span className="inline-flex text-[10px] font-semibold bg-[var(--warning-soft)] text-[var(--warning)] px-1.5 py-0.5 rounded">
-                                  Pending
-                                </span>
-                              )}
-                              {isBillPayment && (
-                                <span className="inline-flex text-[10px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] px-1.5 py-0.5 rounded">
-                                  Bill Payment
-                                </span>
-                              )}
-                              {hasMultipleItems && (
-                                <span className="text-[10px] font-medium text-[var(--muted)]">
-                                  {items.length} items
-                                </span>
-                              )}
-                            </div>
-                            {singleItemDesc && singleItemDesc !== entry.description && (
-                              <p className="text-xs text-[var(--muted)] mt-0.5">{singleItemDesc}</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-right whitespace-nowrap" data-label="Amount">
-                        <span className={`money text-base ${entry.type === "income" ? "text-[var(--positive)]" : "text-[var(--text)]"}`}>
-                          {entry.type === "income" ? "+" : "-"}$
-                          {entry.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-[var(--muted)] whitespace-nowrap" data-label="Account">
-                        {accountMap[entry.account_id] || entry.account_id}
-                      </td>
-                      <td className="px-5 py-3" data-label="Linked">
-                        {commitmentNames.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {allocations.map((a, i) => {
-                              const name = "commitment_name" in a ? (a as { commitment_name: string }).commitment_name : "";
-                              if (!name) return null;
-                              return (
-                                <span
-                                  key={i}
-                                  className="inline-flex text-[10px] font-medium bg-[var(--accent-soft)] text-[var(--accent)] px-2 py-0.5 rounded-full"
-                                >
-                                  {name} (${a.amount.toFixed(2)})
-                                </span>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-[var(--faint)]">--</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right whitespace-nowrap" data-label="Running">
-                        <span className={`money text-sm ${(runningBalances.get(entry.id) ?? 0) >= 0 ? "text-[var(--text-secondary)]" : "text-[var(--negative)]"}`}>
-                          ${(runningBalances.get(entry.id) ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right whitespace-nowrap" data-label="">
-                        <div className="flex flex-wrap justify-end gap-1.5">
-                          {entry.type === "expense" && !entry.pending && (
-                            <button
-                              onClick={() => startLink(entry)}
-                              disabled={isLoading}
-                              className="px-2.5 py-1 text-xs font-medium text-[var(--positive)] bg-[var(--positive-soft)] rounded-lg hover:bg-[var(--positive-soft)] transition-colors"
-                            >
-                              Link
-                            </button>
-                          )}
-                          <button
-                            onClick={() => startEdit(entry)}
-                            disabled={isLoading}
-                            className="px-2.5 py-1 text-xs font-medium text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent-soft)] transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(entry)}
-                            disabled={isLoading}
-                            className="px-2.5 py-1 text-xs font-medium text-[var(--negative)] bg-[var(--negative-soft)] rounded-lg hover:bg-[var(--negative-soft)] transition-colors"
-                          >
-                            {isLoading ? "..." : "Delete"}
-                          </button>
-                          {entry.type === "expense" && !entry.pending && (
-                            <button
-                              onClick={() => startConvertToRecurring(entry)}
-                              disabled={isLoading}
-                              className="px-2.5 py-1 text-xs font-medium text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent-soft)] transition-colors"
-                            >
-                              Make Recurring
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {hasMultipleItems && isExpanded && items.map((item) => (
-                      <tr key={item.id} className="bg-[var(--surface-2)]">
-                        <td className="px-5 py-2" />
-                        <td className="px-5 py-2 pl-12">
-                          <span className="text-xs text-[var(--text-secondary)]">{item.description}</span>
-                        </td>
-                        <td className="px-5 py-2 text-right whitespace-nowrap">
-                          <span className="text-xs text-[var(--muted)]">
-                            ${item.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                        <td className="px-5 py-2" />
-                        <td className="px-5 py-2">
-                          {item.commitment_name ? (
-                            <span className="inline-flex text-[10px] font-medium bg-[var(--accent-soft)] text-[var(--accent)] px-2 py-0.5 rounded-full">
-                              {item.commitment_name}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-[var(--faint)]">--</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-2" />
-                        <td className="px-5 py-2" />
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                      </span>
+                      {entry.pending && <StatusDot tone="warning" label="Pending" />}
+                      {isBillPayment && <StatusDot label="Bill payment" />}
+                      {commitmentNames.length > 0 && <span>Linked {commitmentNames.join(", ")}</span>}
+                      <span>Running ${(runningBalances.get(entry.id) ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                    </>
+                  }
+                  trailing={
+                    <>
+                      {hasMultipleItems && (
+                        <button type="button" onClick={toggleExpand} className="btn btn-secondary px-3" aria-expanded={isExpanded}>
+                          {isExpanded ? "Hide" : `${items.length} items`}
+                        </button>
+                      )}
+                      <RowMenu
+                        label={`Actions for ${entry.description}`}
+                        items={[
+                          { label: "Edit", onSelect: () => startEdit(entry), disabled: isLoading },
+                          ...(entry.type === "expense" && !entry.pending
+                            ? [
+                                { label: "Link", onSelect: () => startLink(entry), disabled: isLoading },
+                                { label: "Make recurring", onSelect: () => startConvertToRecurring(entry), disabled: isLoading },
+                              ]
+                            : []),
+                          { label: isLoading ? "Deleting..." : "Delete", tone: "danger" as const, onSelect: () => handleDelete(entry), disabled: isLoading },
+                        ]}
+                      />
+                    </>
+                  }
+                />
+                {hasMultipleItems && isExpanded && items.map((item) => (
+                  <div key={item.id} className="activity-child">
+                    <span>{item.description}{item.commitment_name ? ` · ${item.commitment_name}` : ""}</span>
+                    <span className="activity-amount">${item.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                ))}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
       {linkingEntry && (

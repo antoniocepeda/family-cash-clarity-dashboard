@@ -8,27 +8,24 @@ interface Props {
 
 const severityConfig = {
   critical: {
-    bg: "bg-[var(--negative-soft)] border-[color-mix(in_srgb,var(--negative)_35%,transparent)]",
-    icon: "bg-[var(--negative)]",
-    text: "text-[var(--negative)]",
-    action: "text-[var(--negative)] hover:text-[var(--negative)]",
-    dot: "bg-[var(--negative)]",
+    bg: "bg-[var(--surface)] border-[var(--line)]",
+    text: "text-[var(--text)]",
+    action: "text-[var(--muted)]",
+    dot: "negative" as const,
     label: "Critical",
   },
   warning: {
-    bg: "bg-[var(--warning-soft)] border-[color-mix(in_srgb,var(--warning)_35%,transparent)]",
-    icon: "bg-[var(--warning)]",
-    text: "text-[var(--warning)]",
-    action: "text-[var(--warning)] hover:text-[var(--warning)]",
-    dot: "bg-[var(--warning)]",
+    bg: "bg-[var(--surface)] border-[var(--line)]",
+    text: "text-[var(--text)]",
+    action: "text-[var(--muted)]",
+    dot: "warning" as const,
     label: "Warning",
   },
   info: {
-    bg: "bg-[var(--surface-2)] border-[var(--line)]",
-    icon: "bg-[var(--faint)]",
-    text: "text-[var(--text-secondary)]",
-    action: "text-[var(--muted)] hover:text-[var(--text)]",
-    dot: "bg-[var(--faint)]",
+    bg: "bg-[var(--surface)] border-[var(--line)]",
+    text: "text-[var(--text)]",
+    action: "text-[var(--muted)]",
+    dot: "neutral" as const,
     label: "Info",
   },
 };
@@ -36,11 +33,9 @@ const severityConfig = {
 export default function RiskBanner({ alerts }: Props) {
   if (alerts.length === 0) {
     return (
-      <div className="rounded-2xl border border-[color-mix(in_srgb,var(--positive)_35%,transparent)] bg-[var(--positive-soft)] p-4 flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--positive)] text-[var(--ink)] text-sm font-bold">
-          ✓
-        </div>
-        <p className="text-sm font-medium text-[var(--positive)]">
+      <div className="surface flex items-center gap-3 p-4">
+        <span className="status-dot" data-tone="positive" aria-hidden="true" />
+        <p className="text-sm font-medium text-[var(--text)]">
           All clear — no risks detected in the next 14 days.
         </p>
       </div>
@@ -61,10 +56,10 @@ export default function RiskBanner({ alerts }: Props) {
             key={i}
             className={`rounded-xl border ${config.bg} p-4 flex items-start gap-3 transition-all`}
           >
-            <div className={`mt-0.5 h-2.5 w-2.5 rounded-full ${config.dot} shrink-0`} />
+            <span className="status-dot mt-1.5" data-tone={config.dot} aria-hidden="true" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className={`text-xs font-semibold uppercase tracking-wider ${config.text}`}>
+                <span className="text-sm font-medium text-[var(--muted)]">
                   {config.label}
                 </span>
               </div>

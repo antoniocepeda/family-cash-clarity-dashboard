@@ -6,6 +6,9 @@ import { cashBasisExplanation, householdCash, pendingListNote, visiblePending } 
 import { HelpPrompt } from "@/lib/reconcile";
 import { SPEND_BUFFER, buildOutlook, computeSafeToSpend } from "@/lib/safe-spend";
 import { Account, CommitmentWithInstances, LedgerEntry, ProjectionDay } from "@/lib/types";
+import ActivityRow from "@/components/ui/ActivityRow";
+import HeroAmount from "@/components/ui/HeroAmount";
+import StatusDot from "@/components/ui/StatusDot";
 
 interface Props {
   accounts: Account[];
@@ -20,21 +23,6 @@ interface Props {
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-
-function HeroAmount({ value }: { value: number }) {
-  const negative = value < 0;
-  const abs = Math.abs(value);
-  const dollars = Math.trunc(abs).toLocaleString("en-US");
-  const cents = abs.toFixed(2).slice(-2);
-
-  return (
-    <p className={`money-xl ${negative ? "text-[var(--negative)]" : "text-[var(--text)]"}`}>
-      <span className="mr-1 align-top text-[0.38em] text-[var(--muted)]">{negative ? "−$" : "$"}</span>
-      {dollars}
-      <span className="text-[0.38em] text-[var(--muted)]">.{cents}</span>
-    </p>
-  );
-}
 
 function syncedLabel(lastSyncedAt: string | null, syncing: boolean) {
   if (syncing) return "Syncing bank…";
@@ -95,118 +83,77 @@ export default function ClarityHome({
         ? `Bills fit, and cash is higher by ${format(parseISO(outlook.paychecks[outlook.paychecks.length - 1].date), "MMM d")}.`
         : `Bills fit through ${format(parseISO(outlook.paychecks[outlook.paychecks.length - 1].date), "MMM d")}, and cash is ${outlook.trend === "down" ? "lower" : "about the same"} than at the first paycheck.`;
 
+  const outlookTone = !outlook.covered ? "negative" : outlook.onTrack ? "positive" : "warning";
+
   return (
-    <div className="space-y-3 lg:space-y-4">
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 lg:gap-4">
-      <section className="surface px-5 py-6 sm:px-7 sm:py-8">
-        <div className="flex items-start justify-between gap-3">
-          <p className="eyebrow">Can I spend today?</p>
-          <span
-            className={`rounded-full px-3 py-1 text-sm font-semibold ${
-              spend.canSpend
-                ? "bg-[var(--positive-soft)] text-[var(--positive)]"
-                : "bg-[var(--negative-soft)] text-[var(--negative)]"
-            }`}
-          >
-            {spend.canSpend ? "Yes" : "No"}
-          </span>
-        </div>
+    <div className="space-y-6 lg:space-y-8">
+      <section className="hero">
+        <p className="eyebrow">Safe to spend</p>
         <HeroAmount value={spend.safeToSpend} />
-        <p className="mt-4 max-w-md text-sm leading-relaxed text-[var(--muted)]">
+        <div className="mt-6">
+          <Link href="/expenses" className="btn btn-primary">
+            Review bills
+          </Link>
+        </div>
+        <p className="mt-5 max-w-md text-sm leading-relaxed text-[var(--muted)]">
           {fmt(spend.cashOnHand)} {cashWord} − {fmt(spend.billsTotal)} due before{" "}
           {spend.paycheckDate ? format(parseISO(spend.paycheckDate), "MMM d") : "the next 2 weeks"} − {fmt(spend.buffer)} buffer.
         </p>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">{cashBasisExplanation(cash.basis)}</p>
         {cash.reserved > 0 && <p className="mt-2 text-sm text-[var(--muted)]">{fmt(cash.reserved)} is set aside in savings.</p>}
-        <p className="mt-3 text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">{syncedLabel(lastSyncedAt, syncing)}</p>
+        <p className="mt-3 text-sm text-[var(--faint)]">{syncedLabel(lastSyncedAt, syncing)}</p>
       </section>
 
-      <section className="surface px-5 py-5 sm:px-7">
-        <p className="eyebrow">Due before payday</p>
-        <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
-          {spend.paycheckDate
-            ? `Next paycheck ${format(parseISO(spend.paycheckDate), "EEE, MMM d")}`
-            : "No paycheck scheduled"}
-        </h2>
-        {spend.paycheckName && spend.paycheckDate && (
-          <p className="mt-1 text-sm text-[var(--muted)]">{spend.paycheckName}</p>
-        )}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-5">
+      <section className="surface overflow-hidden">
+        <div className="px-5 py-5 sm:px-6">
+          <p className="eyebrow">Due before payday</p>
+          <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
+            {spend.paycheckDate
+              ? `Next paycheck ${format(parseISO(spend.paycheckDate), "EEE, MMM d")}`
+              : "No paycheck scheduled"}
+          </h2>
+          {spend.paycheckName && spend.paycheckDate && (
+            <p className="mt-1 text-sm text-[var(--muted)]">{spend.paycheckName}</p>
+          )}
+        </div>
         {spend.bills.length === 0 ? (
-          <p className="mt-4 text-sm text-[var(--muted)]">Nothing unpaid before then.</p>
+          <p className="px-5 pb-5 text-sm text-[var(--muted)] sm:px-6">Nothing unpaid before then.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-[var(--line)]">
-            {spend.bills.map((bill) => (
-              <li key={`${bill.commitmentId ?? bill.name}-${bill.dueDate}`} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-[var(--text)]">{bill.name}</p>
-                  <p className={`text-xs ${bill.dueDate < today ? "font-semibold text-[var(--negative)]" : "text-[var(--muted)]"}`}>
-                    {format(parseISO(bill.dueDate), "EEE, MMM d")}
-                    {bill.dueDate < today ? " · Overdue" : ""}
-                  </p>
-                </div>
-                <p className="money shrink-0 text-sm text-[var(--text)]">{fmt(bill.amount)}</p>
-              </li>
-            ))}
-          </ul>
+          <div className="activity-list">
+            {spend.bills.map((bill) => {
+              const overdue = bill.dueDate < today;
+              return (
+                <ActivityRow
+                  key={`${bill.commitmentId ?? bill.name}-${bill.dueDate}`}
+                  title={bill.name}
+                  tone={overdue ? "overdue" : "neutral"}
+                  amount={fmt(bill.amount)}
+                  subtitle={
+                    <>
+                      <span className={overdue ? "is-overdue-text" : undefined}>
+                        {format(parseISO(bill.dueDate), "EEE, MMM d")}
+                      </span>
+                      {overdue ? <StatusDot tone="negative" label="Overdue" /> : null}
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
         )}
       </section>
-      </div>
 
-      {pending.length > 0 && (
-        <section className="surface px-5 py-5 sm:px-7">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="eyebrow">Pending</p>
-              <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
-                {pending.length === 1 ? "1 transaction not posted yet" : `${pending.length} transactions not posted yet`}
-              </h2>
-            </div>
-            <Link href="/transactions" className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">
-              Ledger
-            </Link>
-          </div>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--muted)]">{pendingListNote(cash.basis)}</p>
-          <ul className="mt-4 divide-y divide-[var(--line)]">
-            {pending.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-[var(--text)]">{entry.description}</p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {format(parseISO(entry.date), "EEE, MMM d")}
-                    {accountName.get(entry.account_id) ? ` · ${accountName.get(entry.account_id)}` : ""}
-                    {" · Pending"}
-                  </p>
-                </div>
-                <p className={`money shrink-0 text-sm ${entry.type === "income" ? "text-[var(--positive)]" : "text-[var(--text)]"}`}>
-                  {entry.type === "income" ? "+" : "−"}
-                  {fmt(entry.amount)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="surface px-5 py-5 sm:px-7">
+      <section className="surface px-5 py-5 sm:px-6">
         <div className="flex items-start justify-between gap-3">
-          <p className="eyebrow">On track?</p>
-          <span
-            className={`rounded-full px-3 py-1 text-sm font-semibold ${
-              outlook.onTrack
-                ? "bg-[var(--positive-soft)] text-[var(--positive)]"
-                : outlook.covered
-                  ? "bg-[var(--warning-soft)] text-[var(--warning)]"
-                  : "bg-[var(--negative-soft)] text-[var(--negative)]"
-            }`}
-          >
-            {outlookTitle}
-          </span>
+          <p className="eyebrow">On track</p>
+          <StatusDot tone={outlookTone} label={outlookTitle} />
         </div>
         <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{outlookDetail}</p>
         {outlook.paychecks.length > 0 && (
-          <ul className="mt-4 space-y-2 lg:grid lg:grid-cols-3 lg:gap-3 lg:space-y-0">
+          <ul className="mt-4 space-y-2">
             {outlook.paychecks.map((paycheck, index) => (
-              <li key={`${paycheck.date}-${paycheck.name}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface-2)] px-3 py-3">
+              <li key={`${paycheck.date}-${paycheck.name}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3 py-3">
                 <div>
                   <p className="text-sm font-medium text-[var(--text)]">
                     Paycheck {index + 1}
@@ -225,6 +172,43 @@ export default function ClarityHome({
           </p>
         )}
       </section>
+      </div>
+
+      {pending.length > 0 && (
+        <section className="surface overflow-hidden">
+          <div className="flex items-start justify-between gap-3 px-5 py-5 sm:px-6">
+            <div>
+              <p className="eyebrow">Pending</p>
+              <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
+                {pending.length === 1 ? "1 transaction not posted yet" : `${pending.length} transactions not posted yet`}
+              </h2>
+            </div>
+            <Link href="/transactions" className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">
+              Ledger
+            </Link>
+          </div>
+          <p className="px-5 pb-2 text-sm leading-relaxed text-[var(--muted)] sm:px-6">{pendingListNote(cash.basis)}</p>
+          <div className="activity-list">
+            {pending.map((entry) => (
+              <ActivityRow
+                key={entry.id}
+                title={entry.description}
+                tone={entry.type === "income" ? "in" : "neutral"}
+                amount={`${entry.type === "income" ? "+" : "−"}${fmt(entry.amount)}`}
+                subtitle={
+                  <>
+                    <span>
+                      {format(parseISO(entry.date), "EEE, MMM d")}
+                      {accountName.get(entry.account_id) ? ` · ${accountName.get(entry.account_id)}` : ""}
+                    </span>
+                    <StatusDot tone="warning" label="Pending" />
+                  </>
+                }
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {prompts.length > 0 && (
         <section className="surface scroll-mb-[calc(var(--tabbar-height)+var(--safe-bottom)+0.75rem)] px-5 py-5 sm:px-7 md:scroll-mb-4">
