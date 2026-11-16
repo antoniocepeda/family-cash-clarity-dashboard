@@ -1,8 +1,10 @@
 import "server-only";
 
 import { plaidTransactionDate, plaidTransactionLabel } from "@/lib/cash-balance";
+import { describePlaidSyncError } from "@/lib/plaid-errors";
 import { decryptPlaidAccessToken, getPlaidClient } from "@/lib/plaid";
 import {
+  clearPlaidItemError,
   getPlaidCursor,
   listPlaidItemsWithTokens,
   markPlaidItemError,
@@ -11,6 +13,13 @@ import {
   upsertPlaidAccount,
   upsertPlaidLedgerTransaction,
 } from "@/lib/repositories/firestore";
+
+export class PlaidItemNotFoundError extends Error {
+  constructor() {
+    super("Linked bank not found");
+    this.name = "PlaidItemNotFoundError";
+  }
+}
 
 export type PlaidSyncSummary = {
   items: number;
@@ -21,13 +30,25 @@ export type PlaidSyncSummary = {
   pending: number;
   refresh_requested: number;
   refresh_skipped: number;
-  errors: { item_id: string; error: string }[];
+  errors: { item_id: string; error: string; error_code: string }[];
 };
 
-export async function syncPlaidForUser(userId: string, options: { refresh?: boolean } = {}): Promise<PlaidSyncSummary> {
+export async function syncPlaidForUser(
+  userId: string,
+  options: { refresh?: boolean; itemId?: string; reconnected?: boolean } = {}
+): Promise<PlaidSyncSummary> {
   const requestRefresh = options.refresh !== false;
   const plaid = getPlaidClient();
-  const items = await listPlaidItemsWithTokens(userId);
+  const allItems = await listPlaidItemsWithTokens(userId);
+  const items = options.itemId ? allItems.filter((item) => item.item_id === options.itemId) : allItems;
+  if (options.itemId && items.length === 0) throw new PlaidItemNotFoundError();
+
+  // A finished Link update repairs the existing item. Drop the stale error
+  // before pulling; a failed pull writes the new Plaid error in its place.
+  if (options.reconnected && options.itemId) {
+    await clearPlaidItemError(userId, options.itemId);
+  }
+
   const summary: PlaidSyncSummary = {
     items: items.length,
     accounts: 0,
@@ -116,9 +137,19 @@ export async function syncPlaidForUser(userId: string, options: { refresh?: bool
 
       await savePlaidSyncState(userId, item.item_id, cursor);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Plaid sync failed";
-      summary.errors.push({ item_id: item.item_id, error: message });
-      await markPlaidItemError(userId, item.item_id, "SYNC_ERROR", message);
+      const described = describePlaidSyncError(err, item.institution_name);
+      summary.errors.push({
+        item_id: item.item_id,
+        error: described.error_message,
+        error_code: described.error_code,
+      });
+      await markPlaidItemError(userId, item.item_id, described.error_code, described.error_message);
+      // Log the code only. Axios errors include the access token in the request body.
+      console.error("Plaid sync item error", {
+        item_id: item.item_id,
+        institution_name: item.institution_name,
+        error_code: described.error_code,
+      });
     }
   }
 
