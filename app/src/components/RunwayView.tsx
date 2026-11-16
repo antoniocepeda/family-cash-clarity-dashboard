@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { format, isBefore, parseISO, startOfToday } from "date-fns";
+import StatusDot from "@/components/ui/StatusDot";
 import { CommitmentInstance, ProjectionDay } from "@/lib/types";
 
 type RangeDays = 14 | 30 | 60;
@@ -52,19 +53,10 @@ function getRiskState(day: ProjectionDay, bufferAmount: number): RiskState {
   return "safe";
 }
 
-function riskClasses(risk: RiskState) {
-  switch (risk) {
-    case "negative":
-      return "border-[color-mix(in_srgb,var(--negative)_45%,transparent)] bg-[var(--negative-soft)] text-[var(--negative)]";
-    case "overdue":
-      return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)] text-[var(--warning)]";
-    case "below buffer":
-      return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)] text-[var(--warning)]";
-    case "tight":
-      return "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)] text-[var(--warning)]";
-    default:
-      return "border-[color-mix(in_srgb,var(--positive)_35%,transparent)] bg-[var(--positive-soft)] text-[var(--positive)]";
-  }
+function riskTone(risk: RiskState): "negative" | "warning" | "neutral" {
+  if (risk === "overdue") return "negative";
+  if (risk === "safe") return "neutral";
+  return "warning";
 }
 
 type EditableItem = ProjectionDay["commitments"][number];
@@ -151,28 +143,28 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
       <div className="grid grid-cols-2 gap-3 border-b border-[var(--line)] py-5 lg:grid-cols-4">
         <div className="rounded-xl bg-[var(--surface-2)] p-4">
           <p className="text-xs font-medium text-[var(--muted)]">Lowest projected balance</p>
-          <p className={`mt-1 text-xl font-bold ${lowestDay.balance < 0 ? "text-[var(--negative)]" : "text-[var(--text)]"}`}>
+          <p className="mt-1 text-xl font-medium text-[var(--text)]">
             {fmt(lowestDay.balance)}
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">{format(parseISO(lowestDay.date), "EEE, MMM d")}</p>
         </div>
         <div className="rounded-xl bg-[var(--surface-2)] p-4">
           <p className="text-xs font-medium text-[var(--muted)]">First negative day</p>
-          <p className={`mt-1 text-xl font-bold ${firstNegativeDay ? "text-[var(--negative)]" : "text-[var(--positive)]"}`}>
+          <p className="mt-1 text-xl font-medium text-[var(--text)]">
             {firstNegativeDay ? format(parseISO(firstNegativeDay.date), "MMM d") : "None"}
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">Within selected range</p>
         </div>
         <div className="rounded-xl bg-[var(--surface-2)] p-4">
           <p className="text-xs font-medium text-[var(--muted)]">Need to avoid negative</p>
-          <p className={`mt-1 text-xl font-bold ${needForZero > 0 ? "text-[var(--negative)]" : "text-[var(--positive)]"}`}>
+          <p className="mt-1 text-xl font-medium text-[var(--text)]">
             {fmt(needForZero)}
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">Based on lowest balance</p>
         </div>
         <div className="rounded-xl bg-[var(--surface-2)] p-4">
           <p className="text-xs font-medium text-[var(--muted)]">Need for {fmt(bufferAmount)} buffer</p>
-          <p className={`mt-1 text-xl font-bold ${needForBuffer > 0 ? "text-[var(--warning)]" : "text-[var(--positive)]"}`}>
+          <p className="mt-1 text-xl font-medium text-[var(--text)]">
             {fmt(needForBuffer)}
           </p>
           <p className="mt-1 text-xs text-[var(--muted)]">Keeps cash above buffer</p>
@@ -187,20 +179,18 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
           const bills = day.commitments.filter((c) => c.type !== "income");
 
           return (
-            <article key={day.date} className={`rounded-xl border p-4 ${riskClasses(risk)}`}>
+            <article key={day.date} className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-base font-bold text-[var(--text)]">
+                    <h2 className="text-base font-medium text-[var(--text)]">
                       {format(date, "EEE, MMM d")}
                     </h2>
-                    <span className="rounded-full border border-current px-2 py-0.5 text-xs font-semibold capitalize">
-                      {risk}
-                    </span>
+                    <StatusDot tone={riskTone(risk)} label={risk} />
                   </div>
                   <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">
                     Projected end:{" "}
-                    <span className={day.balance < 0 ? "text-[var(--negative)]" : "text-[var(--text)]"}>{fmtExact(day.balance)}</span>
+                    <span className={risk === "overdue" ? "is-overdue-text" : "text-[var(--text)]"}>{fmtExact(day.balance)}</span>
                   </p>
                 </div>
               </div>
@@ -208,7 +198,7 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
               {day.commitments.length > 0 ? (
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--positive)]">Income</p>
+                    <p className="text-xs font-medium text-[var(--muted)]">Income</p>
                     {income.length > 0 ? (
                       income.map((item, idx) => (
                         <button
@@ -228,7 +218,7 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--negative)]">Bills</p>
+                    <p className="text-xs font-medium text-[var(--muted)]">Bills</p>
                     {bills.length > 0 ? (
                       bills.map((item, idx) => (
                         <button
@@ -239,7 +229,7 @@ export default function RunwayView({ projection, rangeDays, onRangeChange, onUpd
                           className="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-left transition-colors hover:bg-[var(--surface-3)]"
                         >
                           <span className="min-w-0 truncate text-sm font-medium text-[var(--text)]">{item.name}</span>
-                          <span className="shrink-0 text-sm font-bold tabular-nums text-[var(--negative)]">-{fmtExact(item.amount)}</span>
+                          <span className={`shrink-0 text-sm font-medium tabular-nums ${item.status === "overdue" ? "is-overdue-text" : "text-[var(--text)]"}`}>−{fmtExact(item.amount)}</span>
                         </button>
                       ))
                     ) : (

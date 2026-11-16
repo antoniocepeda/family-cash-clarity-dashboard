@@ -15,6 +15,7 @@ import {
   startOfToday,
   startOfWeek,
 } from "date-fns";
+import StatusDot from "@/components/ui/StatusDot";
 import { CommitmentInstance, ProjectionDay } from "@/lib/types";
 
 interface NewCashEvent {
@@ -80,31 +81,16 @@ function getRiskState(day: ProjectionDay | undefined, bufferAmount = 500): RiskS
 }
 
 function dayClasses(risk: RiskState, inMonth: boolean, selected: boolean) {
-  const base = selected ? "ring-2 ring-[var(--accent)]" : "";
+  const base = selected ? "ring-2 ring-[var(--text)]" : "";
   const dim = inMonth ? "" : "opacity-45";
-  const colors = {
-    safe: "border-[var(--line)] bg-[var(--surface)]",
-    tight: "border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[var(--warning-soft)]",
-    "below buffer": "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)]",
-    negative: "border-[color-mix(in_srgb,var(--negative)_45%,transparent)] bg-[var(--negative-soft)]",
-    overdue: "border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[var(--warning-soft)]",
-  };
-  return `${base} ${dim} ${colors[risk]}`;
+  const mark = risk === "overdue" ? "border-[color-mix(in_srgb,var(--negative)_45%,var(--line))]" : "border-[var(--line)]";
+  return `${base} ${dim} ${mark} bg-[var(--surface)]`;
 }
 
-function riskLabelClasses(risk: RiskState) {
-  switch (risk) {
-    case "negative":
-      return "bg-[var(--negative-soft)] text-[var(--negative)]";
-    case "overdue":
-      return "bg-[var(--warning-soft)] text-[var(--warning)]";
-    case "below buffer":
-      return "bg-[var(--warning-soft)] text-[var(--warning)]";
-    case "tight":
-      return "bg-[var(--warning-soft)] text-[var(--warning)]";
-    default:
-      return "bg-[var(--positive-soft)] text-[var(--positive)]";
-  }
+function riskTone(risk: RiskState): "negative" | "warning" | "neutral" {
+  if (risk === "overdue") return "negative";
+  if (risk === "safe") return "neutral";
+  return "warning";
 }
 
 export default function CashCalendar({ projection, onAddEvent, onUpdateInstance, onDeleteInstance }: Props) {
@@ -244,9 +230,9 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
           <h1 className="mt-1 text-3xl font-medium text-[var(--text)]">Cash</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Select a date to review it. Add an expense or deposit, or drag items on a larger screen to move due dates.</p>
         </div>
-        <div className="scroll-row text-xs font-semibold lg:flex-wrap lg:justify-end lg:overflow-visible">
+        <div className="scroll-row lg:flex-wrap lg:justify-end lg:overflow-visible">
           {(["safe", "tight", "below buffer", "negative", "overdue"] as RiskState[]).map((risk) => (
-            <span key={risk} className={`rounded-full px-2 py-1 capitalize ${riskLabelClasses(risk)}`}>{risk}</span>
+            <StatusDot key={risk} tone={riskTone(risk)} label={risk} />
           ))}
         </div>
       </div>
@@ -312,21 +298,21 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                 void moveItem(JSON.parse(payload) as EditableItem, dateKey).finally(() => setDraggingKey(null));
               }}
               aria-pressed={selected}
-              className={`min-h-16 rounded-lg border p-1 text-left transition-colors hover:border-[var(--line-strong)] sm:min-h-40 sm:rounded-xl sm:p-2 lg:min-h-52 xl:min-h-60 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
+              className={`day-cell min-h-16 rounded-lg border p-1 text-left transition-colors hover:border-[var(--line-strong)] sm:min-h-40 sm:rounded-xl sm:p-2 lg:min-h-52 xl:min-h-60 ${dayClasses(risk, isSameMonth(day, month), selected)}`}
             >
               <div className="flex items-start justify-between gap-1">
                 <span className="text-xs font-medium text-[var(--text)] sm:text-base">{format(day, "d")}</span>
                 {dayProjection && (
                   <>
-                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full sm:hidden ${risk === "negative" ? "bg-[var(--negative)]" : risk === "safe" ? "bg-[var(--positive)]" : "bg-[var(--warning)]"}`} />
-                    <span className={`hidden rounded-full px-1.5 py-0.5 text-[10px] font-semibold capitalize sm:inline ${riskLabelClasses(risk)}`}>
-                      {risk === "below buffer" ? "buffer" : risk}
+                    <span className="mt-1 hidden sm:inline">
+                      <StatusDot tone={riskTone(risk)} label={risk === "below buffer" ? "buffer" : risk} />
                     </span>
+                    <span className={`status-dot mt-1 sm:hidden`} data-tone={riskTone(risk)} />
                   </>
                 )}
               </div>
               {dayProjection && (
-                <div className={`mt-1 truncate text-[10px] font-medium tabular-nums sm:text-xs lg:text-sm ${dayProjection.balance < 0 ? "text-[var(--negative)]" : "text-[var(--muted)]"}`}>
+                <div className={`mt-1 truncate text-[10px] font-medium tabular-nums sm:text-xs lg:text-sm ${risk === "overdue" ? "is-overdue-text" : "text-[var(--muted)]"}`}>
                   <span className="hidden sm:inline">End </span>
                   {money(dayProjection.balance)}
                 </div>
@@ -360,14 +346,10 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                         event.dataTransfer.setData("application/json", JSON.stringify(item));
                       }}
                       onDragEnd={() => setDraggingKey(null)}
-                      className={`block cursor-grab rounded border px-1.5 py-1 text-[11px] font-semibold leading-tight shadow-sm active:cursor-grabbing lg:px-2 lg:py-1.5 lg:text-sm ${
-                        isIncome
-                          ? "border-[color-mix(in_srgb,var(--positive)_35%,transparent)] bg-[var(--surface)] text-[var(--positive)]"
-                          : "border-[color-mix(in_srgb,var(--negative)_35%,transparent)] bg-[var(--surface)] text-[var(--negative)]"
-                      } ${draggingKey === itemKey ? "opacity-50" : ""}`}
+                      className={`block cursor-grab rounded border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-1 text-[11px] font-semibold leading-tight active:cursor-grabbing lg:px-2 lg:py-1.5 lg:text-sm ${draggingKey === itemKey ? "opacity-50" : ""}`}
                     >
                       <span className="block truncate text-[var(--text)]">{item.name}</span>
-                      <span className="tabular-nums">{isIncome ? "+" : "-"}{money(item.amount, item.amount % 1 !== 0)}</span>
+                      <span className={`tabular-nums ${isIncome ? "text-[var(--positive)]" : item.status === "overdue" ? "is-overdue-text" : "text-[var(--text)]"}`}>{isIncome ? "+" : "-"}{money(item.amount, item.amount % 1 !== 0)}</span>
                     </span>
                   );
                 })}
@@ -485,13 +467,13 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
             </div>
 
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={deleteEditing} disabled={saving} className="rounded-lg border border-[color-mix(in_srgb,var(--negative)_35%,transparent)] px-4 py-2 text-sm font-semibold text-[var(--negative)] hover:bg-[var(--negative-soft)] disabled:opacity-50 sm:mr-auto">
+              <button type="button" onClick={deleteEditing} disabled={saving} className="btn btn-danger sm:mr-auto">
                 Delete occurrence
               </button>
-              <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-3)]">
+              <button type="button" onClick={() => setEditing(null)} className="btn btn-secondary">
                 Cancel
               </button>
-              <button disabled={saving} className="rounded-lg bg-[var(--text)] px-4 py-2 text-sm font-semibold text-[var(--ink)] hover:opacity-90 disabled:opacity-50">
+              <button disabled={saving} className="btn btn-primary">
                 {saving ? "Saving..." : "Save changes"}
               </button>
             </div>
@@ -514,7 +496,7 @@ export default function CashCalendar({ projection, onAddEvent, onUpdateInstance,
                   <span className="block truncate text-sm font-semibold text-[var(--text)]">{item.name}</span>
                   <span className="text-xs capitalize text-[var(--muted)]">{item.status ?? "planned"}</span>
                 </span>
-                <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-[var(--positive)]" : "text-[var(--negative)]"}`}>
+                <span className={`shrink-0 text-sm font-bold tabular-nums ${item.type === "income" ? "text-[var(--positive)]" : item.status === "overdue" ? "is-overdue-text" : "text-[var(--text)]"}`}>
                   {item.type === "income" ? "+" : "-"}{money(item.amount, true)}
                 </span>
               </button>
