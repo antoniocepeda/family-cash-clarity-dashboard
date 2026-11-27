@@ -550,13 +550,13 @@ function CommitmentsManager({
     onRefresh();
   };
 
-  const markOutsidePaid = async (id: string, dueDate: string) => {
+  const markOutsidePaid = async (id: string, dueDate: string, instanceId: string | null) => {
     setMarkError(null);
     try {
       const res = await authFetch("/api/commitments/mark-paid", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, instance_due_date: dueDate, paid_elsewhere: true }),
+        body: JSON.stringify({ id, instance_due_date: dueDate, instance_id: instanceId, paid_elsewhere: true }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -797,7 +797,7 @@ function CommitmentsManager({
                       { label: "Edit", onSelect: () => startEdit(cmt) },
                       ...outsideDue.map((item) => ({
                         label: `Mark paid ${item.dueDate}`,
-                        onSelect: () => markOutsidePaid(cmt.id, item.dueDate),
+                        onSelect: () => markOutsidePaid(cmt.id, item.dueDate, item.instanceId),
                       })),
                       { label: "Delete", tone: "danger", onSelect: () => deleteCommitment(cmt.id) },
                     ]}

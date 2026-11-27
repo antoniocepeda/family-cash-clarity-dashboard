@@ -118,6 +118,32 @@ test("outside bills ask to be marked through the end of this month", () => {
   ]);
 });
 
+test("a rescheduled outside bill keeps the original instance id and edited amount", () => {
+  const items = outsideBillsToMark([
+    {
+      id: "tm",
+      name: "T-Mobile",
+      type: "bill",
+      amount: 140,
+      due_date: "2026-11-01",
+      paid_outside: true,
+      instances: [
+        {
+          id: "tm_2026-11-01",
+          due_date: "2026-11-16",
+          status: "planned",
+          planned_amount: 155,
+        },
+      ],
+    },
+  ], today);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].instanceId, "tm_2026-11-01");
+  assert.equal(items[0].dueDate, "2026-11-16");
+  assert.equal(items[0].amount, 155);
+});
+
 test("without instances, an unpaid past template date is the fallback", () => {
   assert.equal(unpaidPastDueDate({
     type: "bill",

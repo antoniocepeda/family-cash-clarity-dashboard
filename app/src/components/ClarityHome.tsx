@@ -3,7 +3,7 @@
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { cashBasisExplanation, householdCash, pendingListNote, visiblePending } from "@/lib/cash-balance";
-import { outsideBillsToMark } from "@/lib/overdue";
+import { outsideBillKey, outsideBillsToMark } from "@/lib/overdue";
 import { HelpPrompt } from "@/lib/reconcile";
 import { SPEND_BUFFER, buildOutlook, computeSafeToSpend } from "@/lib/safe-spend";
 import { Account, CommitmentWithInstances, LedgerEntry, ProjectionDay } from "@/lib/types";
@@ -23,7 +23,7 @@ interface Props {
   onResolve?: (promptId: string, choiceId: string) => void;
   outsideError?: string | null;
   markedOutsideKeys?: string[];
-  onMarkPaidElsewhere?: (commitmentId: string, dueDate: string) => void;
+  onMarkPaidElsewhere?: (commitmentId: string, dueDate: string, instanceId: string | null) => void;
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -93,7 +93,7 @@ export default function ClarityHome({
   const outlookTone = !outlook.covered ? "negative" : outlook.onTrack ? "positive" : "warning";
   const hiddenOutside = new Set(markedOutsideKeys);
   const outsideBills = outsideBillsToMark(commitments, today).filter(
-    (item) => !hiddenOutside.has(`${item.commitmentId}|${item.dueDate}`)
+    (item) => !hiddenOutside.has(outsideBillKey(item))
   );
 
   return (
@@ -269,7 +269,7 @@ export default function ClarityHome({
           {outsideError && <p className="mt-3 text-sm text-[var(--negative)]">{outsideError}</p>}
           <ul className="mt-4 space-y-2">
             {outsideBills.map((item) => (
-              <li key={`${item.commitmentId}-${item.dueDate}`} className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3 py-3">
+              <li key={outsideBillKey(item)} className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[var(--text)]">{item.name}</p>
                   <p className="text-xs text-[var(--muted)]">
@@ -279,7 +279,7 @@ export default function ClarityHome({
                 <button
                   type="button"
                   disabled={!onMarkPaidElsewhere}
-                  onClick={() => onMarkPaidElsewhere?.(item.commitmentId, item.dueDate)}
+                  onClick={() => onMarkPaidElsewhere?.(item.commitmentId, item.dueDate, item.instanceId)}
                   className="btn btn-ghost min-h-11 shrink-0 px-4 text-sm"
                 >
                   Mark paid

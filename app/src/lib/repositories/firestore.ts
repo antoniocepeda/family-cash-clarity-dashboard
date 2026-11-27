@@ -584,12 +584,15 @@ export async function skipInstance(userId: string, instanceId: string) {
  * Mark one month paid with no bank transaction. Status stays "paid" so forecasts
  * and overdue checks treat it as settled. paid_elsewhere records that nothing
  * was linked, and no ledger row is written, so linked balances do not change.
+ * Pass the stored instance id when the occurrence already exists. A one-time
+ * due-date edit keeps the original document id, so deriving a new id from the
+ * edited date would create a second unpaid copy.
  */
 export async function markInstancePaidElsewhere(
   userId: string,
   input: { instanceId?: string; commitmentId?: string; dueDate?: string }
 ) {
-  let id = input.instanceId;
+  let id = input.instanceId?.trim() || "";
   let commitmentId = input.commitmentId;
   if (!id) {
     if (!commitmentId || !input.dueDate) throw new Error("Instance not found");
@@ -601,6 +604,7 @@ export async function markInstancePaidElsewhere(
   const snap = await ref.get();
   if (!snap.exists) throw new Error("Instance not found");
   const inst = normalizeInstance(snap.id, snap.data()!);
+  if (commitmentId && inst.commitment_id !== commitmentId) throw new Error("Instance not found");
   if (inst.status === "paid" || inst.status === "funded" || inst.status === "skipped") return { alreadySettled: true };
 
   commitmentId = commitmentId || inst.commitment_id;

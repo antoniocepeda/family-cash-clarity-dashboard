@@ -55,20 +55,30 @@ export function unpaidPastDueDate(
 
 export type OutsideBillCheck = {
   commitmentId: string;
+  /** Stored instance id. Null only when no instance exists yet. */
+  instanceId: string | null;
   name: string;
   amount: number;
   dueDate: string;
 };
 
 type OutsideInstance = PayableInstance & {
+  id?: string | null;
   planned_amount?: number | null;
   name_override?: string | null;
 };
+
+/** Hide key for one outside-bill row. Prefers the stored instance id. */
+export function outsideBillKey(item: Pick<OutsideBillCheck, "commitmentId" | "dueDate" | "instanceId">) {
+  return item.instanceId || `${item.commitmentId}|${item.dueDate}`;
+}
 
 /**
  * Unsettled months for bills paid from an account that is not linked.
  * Includes anything due through the end of this month, including older months
  * that are still open. Next month stays off the list until it arrives.
+ * The instance id is kept even when a one-time edit changed the due date,
+ * because that edit does not rename the stored document.
  */
 export function outsideBillsToMark(
   commitments: Array<{
@@ -95,6 +105,7 @@ export function outsideBillsToMark(
       if (commitment.due_date <= monthEnd) {
         items.push({
           commitmentId: commitment.id,
+          instanceId: null,
           name: commitment.name,
           amount: commitment.amount,
           dueDate: commitment.due_date,
@@ -107,6 +118,7 @@ export function outsideBillsToMark(
       if (instance.status && SETTLED.has(instance.status)) continue;
       items.push({
         commitmentId: commitment.id,
+        instanceId: instance.id?.trim() || null,
         name: instance.name_override?.trim() || commitment.name,
         amount: typeof instance.planned_amount === "number" ? instance.planned_amount : commitment.amount,
         dueDate: instance.due_date,

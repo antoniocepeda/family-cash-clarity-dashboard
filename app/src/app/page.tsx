@@ -10,6 +10,7 @@ import AgentActivity from "@/components/AgentActivity";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { outsideBillKey } from "@/lib/overdue";
 import { HelpPrompt, restorePrompt, withoutPrompt } from "@/lib/reconcile";
 import { BACKGROUND_SYNC_MS, STALE_SYNC_MS, SYNC_FOLLOW_UP_MS } from "@/lib/schedule";
 import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerEntry, LedgerItemInput, PlaidItem, ProjectionDay } from "@/lib/types";
@@ -238,15 +239,20 @@ export default function Dashboard() {
     }
   }, [fetchProjection]);
 
-  const handleMarkPaidElsewhere = async (commitmentId: string, dueDate: string) => {
-    const key = `${commitmentId}|${dueDate}`;
+  const handleMarkPaidElsewhere = async (commitmentId: string, dueDate: string, instanceId: string | null) => {
+    const key = outsideBillKey({ commitmentId, dueDate, instanceId });
     setOutsideError(null);
     setMarkedOutside((current) => (current.includes(key) ? current : [...current, key]));
     try {
       const res = await authFetch("/api/commitments/mark-paid", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: commitmentId, instance_due_date: dueDate, paid_elsewhere: true }),
+        body: JSON.stringify({
+          id: commitmentId,
+          instance_due_date: dueDate,
+          instance_id: instanceId,
+          paid_elsewhere: true,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
