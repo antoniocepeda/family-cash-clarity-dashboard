@@ -1,8 +1,8 @@
 import "server-only";
 
-import { format, startOfDay } from "date-fns";
+import { addDays, format, startOfDay } from "date-fns";
 import { materializeRollingInstances } from "@/lib/instances";
-import { planReconciliation, resolveChoiceWork, type BankTxn, type OpenBill } from "@/lib/reconcile";
+import { planReconciliation, resolveChoiceWork, STILL_OWE_REASK_DAYS, type BankTxn, type OpenBill } from "@/lib/reconcile";
 import {
   addBankMatchTag,
   closeInstanceAsPaid,
@@ -13,6 +13,7 @@ import {
   listInstances,
   listLedger,
   listReconcilePromptDocs,
+  markInstancePaidElsewhere,
   saveReconcilePrompt,
   setReconcilePromptStatus,
   skipInstance,
@@ -43,6 +44,7 @@ export async function reconcileOpenBills(userId: string) {
       name: instance.name_override || commitment?.name || instance.commitment_name || "Bill",
       bankMatchTags: commitment?.bank_match_tags ?? [],
       accountHint: commitment?.account_hint ?? null,
+      paidOutside: Boolean(commitment?.paid_outside),
       dueDate: instance.due_date,
       plannedAmount: instance.planned_amount,
       status: instance.status,
@@ -67,6 +69,9 @@ export async function reconcileOpenBills(userId: string) {
     transactions,
     today,
     dismissedPromptIds: stored.filter((prompt) => prompt.status === "dismissed").map((prompt) => prompt.id),
+    quietPromptIds: stored
+      .filter((prompt) => prompt.status === "snoozed" && prompt.reaskAfter && prompt.reaskAfter > today)
+      .map((prompt) => prompt.id),
   });
 
   let matched = 0;
@@ -81,9 +86,9 @@ export async function reconcileOpenBills(userId: string) {
   }
 
   const openIds = new Set(plan.prompts.map((prompt) => prompt.id));
-  for (const prompt of plan.prompts) await saveReconcilePrompt(userId, prompt, "open");
+  for (const prompt of plan.prompts) await saveReconcilePrompt(userId, prompt, "open", today);
   for (const existing of stored) {
-    if (existing.status === "dismissed" || openIds.has(existing.id)) continue;
+    if (existing.status === "dismissed" || existing.status === "snoozed" || openIds.has(existing.id)) continue;
     await setReconcilePromptStatus(userId, existing.id, "resolved");
   }
 
@@ -109,6 +114,14 @@ export async function resolveReconcileChoice(userId: string, promptId: string, c
       addBankMatchTag(userId, work.commitmentId, txn.description),
       setReconcilePromptStatus(userId, promptId, "dismissed"),
     ]);
+  } else if (work.action === "paid_elsewhere") {
+    await Promise.all([
+      markInstancePaidElsewhere(userId, { instanceId: work.instanceId }),
+      setReconcilePromptStatus(userId, promptId, "dismissed"),
+    ]);
+  } else if (work.action === "still_owe") {
+    const reaskAfter = format(addDays(startOfDay(new Date()), STILL_OWE_REASK_DAYS), "yyyy-MM-dd");
+    await setReconcilePromptStatus(userId, promptId, "snoozed", reaskAfter);
   } else if (work.action === "skip") {
     await Promise.all([
       skipInstance(userId, work.instanceId),

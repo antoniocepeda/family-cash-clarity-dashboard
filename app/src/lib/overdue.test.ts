@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { unpaidPastDueDate } from "./overdue";
+import { isPaidOutsideBill, outsideBillsToMark, unpaidPastDueDate } from "./overdue";
 
 const today = "2026-11-16";
 
@@ -61,6 +61,61 @@ test("income and a settled one-time bill are not overdue", () => {
     due_date: "2026-11-01",
     instances: [{ due_date: "2026-11-01", status: "funded", remaining_amount: 0 }],
   }, today), null);
+});
+
+test("a bill paid outside linked accounts is not an overdue alert", () => {
+  assert.equal(unpaidPastDueDate({
+    type: "bill",
+    paid: 0,
+    paid_outside: true,
+    due_date: "2026-11-01",
+    instances: [{ due_date: "2026-11-01", status: "planned", remaining_amount: 140 }],
+  }, today), null);
+  assert.equal(isPaidOutsideBill({ type: "bill", paid_outside: 1 }), true);
+  assert.equal(isPaidOutsideBill({ type: "bill" }), false);
+  assert.equal(isPaidOutsideBill({ type: "income", paid_outside: true }), false);
+});
+
+test("outside bills ask to be marked through the end of this month", () => {
+  const items = outsideBillsToMark([
+    {
+      id: "tm",
+      name: "T-Mobile",
+      type: "bill",
+      amount: 140,
+      due_date: "2026-10-14",
+      paid_outside: true,
+      instances: [
+        { due_date: "2026-10-14", status: "planned", planned_amount: 140 },
+        { due_date: "2026-11-14", status: "planned", planned_amount: 140 },
+        { due_date: "2026-12-14", status: "planned", planned_amount: 140 },
+      ],
+    },
+    {
+      id: "x",
+      name: "X Premium",
+      type: "bill",
+      amount: 11,
+      due_date: "2026-11-03",
+      paid_outside: true,
+      instances: [
+        { due_date: "2026-11-03", status: "paid", planned_amount: 11, remaining_amount: 0 },
+      ],
+    },
+    {
+      id: "rent",
+      name: "Rent",
+      type: "bill",
+      amount: 2000,
+      due_date: "2026-11-01",
+      instances: [{ due_date: "2026-11-01", status: "planned", planned_amount: 2000 }],
+    },
+  ], today);
+
+  assert.deepEqual(items.map((item) => [item.name, item.dueDate]), [
+    ["T-Mobile", "2026-10-14"],
+    ["T-Mobile", "2026-11-14"],
+  ]);
 });
 
 test("without instances, an unpaid past template date is the fallback", () => {

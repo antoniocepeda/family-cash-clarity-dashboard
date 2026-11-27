@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
-import { markCommitmentPaid } from "@/lib/repositories/firestore";
+import { markCommitmentPaid, markInstancePaidElsewhere } from "@/lib/repositories/firestore";
 import type { DecodedIdToken } from "firebase-admin/auth";
 
 async function handlePOST(req: NextRequest, { user }: { user: DecodedIdToken }) {
-  const { id, actual_amount, instance_due_date, note, account_id } = await req.json();
+  const { id, actual_amount, instance_due_date, note, account_id, paid_elsewhere } = await req.json();
+  if (paid_elsewhere) {
+    if (!id || !instance_due_date) {
+      return NextResponse.json({ error: "id and instance_due_date required" }, { status: 400 });
+    }
+    try {
+      await markInstancePaidElsewhere(user.uid, { commitmentId: id, dueDate: instance_due_date });
+      return NextResponse.json({ success: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Payment failed";
+      return NextResponse.json({ error: message }, { status: message === "not found" ? 404 : 400 });
+    }
+  }
   if (!id || actual_amount === undefined) {
     return NextResponse.json({ error: "id and actual_amount required" }, { status: 400 });
   }

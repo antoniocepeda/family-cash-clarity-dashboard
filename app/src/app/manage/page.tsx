@@ -9,7 +9,7 @@ import RowMenu from "@/components/ui/RowMenu";
 import StatusDot from "@/components/ui/StatusDot";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { unpaidPastDueDate } from "@/lib/overdue";
+import { outsideBillsToMark, unpaidPastDueDate } from "@/lib/overdue";
 import { Account, Commitment, CommitmentWithInstances, PlaidAccount, PlaidStatus } from "@/lib/types";
 
 type LinkSession = { mode: "create" | "update"; itemId: string | null };
@@ -440,6 +440,7 @@ function CommitmentsManager({
   const [editCustomUnit, setEditCustomUnit] = useState<"days" | "weeks">("days");
   const [bankTagDraft, setBankTagDraft] = useState("");
   const [accountHintDraft, setAccountHintDraft] = useState("");
+  const [markError, setMarkError] = useState<string | null>(null);
   const [newCmt, setNewCmt] = useState({
     name: "",
     type: "bill" as string,
@@ -451,6 +452,7 @@ function CommitmentsManager({
     bank_statement_name: "",
     account_hint: "",
     account_id: "",
+    paid_outside: false,
   });
 
   const maskFor = (accountId: string) => plaidAccounts.find((account) => account.app_account_id === accountId)?.mask;
@@ -505,7 +507,13 @@ function CommitmentsManager({
     await authFetch("/api/commitments", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, recurrence_rule: effectiveRule, bank_match_tags: bankTagDraft, account_hint: accountHintDraft }),
+      body: JSON.stringify({
+        ...form,
+        recurrence_rule: effectiveRule,
+        bank_match_tags: bankTagDraft,
+        account_hint: accountHintDraft,
+        paid_outside: form.type === "income" ? false : Boolean(form.paid_outside),
+      }),
     });
     setEditing(null);
     onRefresh();
@@ -531,14 +539,34 @@ function CommitmentsManager({
         recurrence_count: newCmt.recurrence_count ? Number(newCmt.recurrence_count) : null,
         bank_match_tags: newCmt.bank_statement_name,
         account_hint: newCmt.account_hint,
+        paid_outside: newCmt.paid_outside,
         amount: parseFloat(newCmt.amount) || 0,
       }),
     });
     setAdding(false);
     setCustomValue("");
     setCustomUnit("days");
-    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", bank_statement_name: "", account_hint: "", account_id: "" });
+    setNewCmt({ name: "", type: "bill", amount: "", due_date: new Date().toISOString().slice(0, 10), recurrence_rule: "", recurrence_end_date: "", recurrence_count: "", bank_statement_name: "", account_hint: "", account_id: "", paid_outside: false });
     onRefresh();
+  };
+
+  const markOutsidePaid = async (id: string, dueDate: string) => {
+    setMarkError(null);
+    try {
+      const res = await authFetch("/api/commitments/mark-paid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, instance_due_date: dueDate, paid_elsewhere: true }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMarkError(typeof body.error === "string" ? body.error : "Could not mark that bill paid");
+        return;
+      }
+      onRefresh();
+    } catch (err) {
+      setMarkError(err instanceof Error ? err.message : "Could not mark that bill paid");
+    }
   };
 
   const sorted = [...commitments].sort((a, b) => a.due_date.localeCompare(b.due_date));
@@ -616,6 +644,23 @@ function CommitmentsManager({
             </select>
             <span className="mt-1 block font-normal text-[var(--muted)]">Optional. Tie this bill to one card when you have two of the same subscription.</span>
           </label>
+          {newCmt.type === "bill" && (
+            <label className="flex items-start gap-3 text-sm text-[var(--text)]">
+              <input
+                type="checkbox"
+                checked={newCmt.paid_outside}
+                onChange={(e) => setNewCmt({ ...newCmt, paid_outside: e.target.checked })}
+                aria-label="Paid outside linked accounts"
+                className="mt-1 rounded border-[var(--line-strong)]"
+              />
+              <span>
+                <span className="font-medium">Paid outside linked accounts</span>
+                <span className="mt-1 block text-xs font-normal text-[var(--muted)]">
+                  Paid from an account that is not linked, such as T-Mobile or X Premium. No match questions and no overdue alert. Mark it paid once a month.
+                </span>
+              </span>
+            </label>
+          )}
           {newCmt.recurrence_rule === "custom" && (
             <div>
               <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Every how many?</label>
@@ -636,6 +681,7 @@ function CommitmentsManager({
         </div>
       )}
 
+      {markError && <p className="text-sm text-[var(--negative)]">{markError}</p>}
       <div className="surface overflow-hidden">
         {commitments.length === 0 && (
           <p className="px-5 py-8 text-center text-sm text-[var(--muted)]">No expenses yet. Add your first bill or income above.</p>
@@ -644,6 +690,7 @@ function CommitmentsManager({
           {sorted.map((cmt) => {
             const today = new Date().toLocaleDateString("en-CA");
             const overdueDate = unpaidPastDueDate(cmt, today);
+            const outsideDue = cmt.paid_outside ? outsideBillsToMark([cmt], today).slice(0, 6) : [];
             if (editing === cmt.id) {
               return (
                 <div key={cmt.id} className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-2)] p-4">
@@ -701,6 +748,23 @@ function CommitmentsManager({
                       ))}
                     </select>
                   </label>
+                  {form.type !== "income" && (
+                    <label className="flex items-start gap-3 text-sm text-[var(--text)]">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.paid_outside)}
+                        onChange={(e) => setForm({ ...form, paid_outside: e.target.checked })}
+                        aria-label="Paid outside linked accounts"
+                        className="mt-1 rounded border-[var(--line-strong)]"
+                      />
+                      <span>
+                        <span className="font-medium">Paid outside linked accounts</span>
+                        <span className="mt-1 block text-xs font-normal text-[var(--muted)]">
+                          Paid from an account that is not linked, such as T-Mobile or X Premium. No match questions and no overdue alert. Mark it paid once a month on Home.
+                        </span>
+                      </span>
+                    </label>
+                  )}
                   <div className="flex gap-2">
                     <button onClick={saveEdit} className="btn btn-primary">Save</button>
                     <button onClick={() => setEditing(null)} className="btn btn-secondary">Cancel</button>
@@ -721,6 +785,7 @@ function CommitmentsManager({
                     <span>· {formatRecurrence(cmt.recurrence_rule, cmt.recurrence_end_date, cmt.recurrence_count)}</span>
                     {(cmt.bank_match_tags ?? []).length > 0 && <span>· Statement {cmt.bank_match_tags?.join(", ")}</span>}
                     {cmt.account_hint && <span>· Card {hintLabel(cmt.account_hint)}</span>}
+                    {cmt.paid_outside && <span>· Paid outside linked accounts</span>}
                     {cmt.paid === 1 && <StatusDot tone="neutral" label="Paid" />}
                     {overdueDate && <StatusDot tone="negative" label="Overdue" />}
                   </>
@@ -730,6 +795,10 @@ function CommitmentsManager({
                     label={`Actions for ${cmt.name}`}
                     items={[
                       { label: "Edit", onSelect: () => startEdit(cmt) },
+                      ...outsideDue.map((item) => ({
+                        label: `Mark paid ${item.dueDate}`,
+                        onSelect: () => markOutsidePaid(cmt.id, item.dueDate),
+                      })),
                       { label: "Delete", tone: "danger", onSelect: () => deleteCommitment(cmt.id) },
                     ]}
                   />

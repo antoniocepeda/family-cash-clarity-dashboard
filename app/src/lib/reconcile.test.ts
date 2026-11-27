@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { amountWithinTolerance, learnBankTag, merchantScore, planReconciliation, resolveChoiceWork, restorePrompt, withoutPrompt, type BankTxn, type HelpPrompt, type OpenBill } from "./reconcile";
+import { amountWithinTolerance, cleanMerchantTag, learnBankTag, merchantScore, planReconciliation, resolveChoiceWork, restorePrompt, withoutPrompt, type BankTxn, type HelpPrompt, type OpenBill } from "./reconcile";
 
 function bill(partial: Partial<OpenBill> & Pick<OpenBill, "instanceId" | "name" | "dueDate" | "plannedAmount">): OpenBill {
   return {
@@ -44,7 +44,7 @@ test("two plausible bills become a needs-your-help prompt instead of a guess", (
       bill({ instanceId: "v1", commitmentId: "v", name: "Verizon", dueDate: "2026-11-02", plannedAmount: 200 }),
       bill({ instanceId: "v2", commitmentId: "vi", name: "Verizon Internet", dueDate: "2026-11-04", plannedAmount: 220 }),
     ],
-    transactions: [txn({ id: "txn-1", name: "VERIZON WIRELESS", amount: 246, date: "2026-11-03" })],
+    transactions: [txn({ id: "txn-1", name: "VERIZON WIRELESS", amount: 210, date: "2026-11-03" })],
   });
 
   assert.equal(plan.matches.length, 0);
@@ -221,7 +221,9 @@ test("a past bill with no payment is asked once and stays dismissed", () => {
   const bills = [bill({ instanceId: "rent_2026-10-01", name: "Rent", dueDate: "2026-10-01", plannedAmount: 2000 })];
   const first = planReconciliation({ today: "2026-11-01", dismissedPromptIds: [], bills, transactions: [] });
   assert.equal(first.prompts[0]?.id, "unmatched:rent_2026-10-01");
-  assert.equal(first.prompts[0].choices.some((choice) => choice.label === "Dismiss"), true);
+  assert.equal(first.prompts[0].title, "Did Rent ($2,000.00) get paid?");
+  assert.equal(first.prompts[0].choices.some((choice) => choice.id === "skip"), true);
+  assert.equal(first.prompts[0].choices.some((choice) => choice.label === "Dismiss"), false);
 
   const second = planReconciliation({
     today: "2026-11-01",
@@ -230,4 +232,161 @@ test("a past bill with no payment is asked once and stays dismissed", () => {
     transactions: [],
   });
   assert.equal(second.prompts.length, 0);
+});
+
+test("an overdue bill only offers name-matched charges, closest amount first, at most 3", () => {
+  const groceries = Array.from({ length: 12 }, (_, index) => txn({
+    id: `grocery-${index}`,
+    name: index % 2 === 0 ? "H-E-B" : "STARBUCKS",
+    amount: 130 + index,
+    date: "2026-11-04",
+  }));
+  const plan = planReconciliation({
+    today: "2026-11-12",
+    dismissedPromptIds: [],
+    bills: [bill({
+      instanceId: "phone_2026-11-03",
+      commitmentId: "phone",
+      name: "T-Mobile",
+      dueDate: "2026-11-03",
+      plannedAmount: 140,
+      bankMatchTags: ["TMOBILE"],
+    })],
+    transactions: [
+      ...groceries,
+      txn({ id: "tm-far", name: "TMOBILE PCS", amount: 140, date: "2026-11-06" }),
+      txn({ id: "tm-close", name: "TMOBILE*AUTOPAY", amount: 140, date: "2026-11-03" }),
+      txn({ id: "tm-mid", name: "T-MOBILE", amount: 140, date: "2026-11-02" }),
+      txn({ id: "tm-later", name: "TMOBILE STORE", amount: 140, date: "2026-11-05" }),
+    ],
+  });
+
+  assert.equal(plan.matches.length, 0);
+  assert.equal(plan.prompts.length, 1);
+  assert.equal(plan.prompts[0].title, "Did T-Mobile ($140.00) get paid?");
+  const charges = plan.prompts[0].choices.filter((choice) => choice.action === "assign");
+  assert.deepEqual(charges.map((choice) => choice.transactionId), ["tm-close", "tm-mid", "tm-later"]);
+  assert.equal(charges.every((choice) => choice.label.startsWith("Yes, this charge")), true);
+  assert.equal(plan.prompts[0].choices.some((choice) => /H-E-B|STARBUCKS/i.test(choice.label)), false);
+  assert.deepEqual(
+    plan.prompts[0].choices.filter((choice) => choice.action !== "assign").map((choice) => choice.id),
+    ["paid-elsewhere", "still-owe", "skip"],
+  );
+});
+
+test("a small bill does not offer or auto-match a charge outside $5 or 10 percent", () => {
+  assert.equal(amountWithinTolerance(20, 24.5), true);
+  assert.equal(amountWithinTolerance(20, 26), false);
+  assert.equal(amountWithinTolerance(200, 246), true);
+
+  const plan = planReconciliation({
+    today: "2026-11-10",
+    dismissedPromptIds: [],
+    bills: [bill({ instanceId: "x_2026-11-02", commitmentId: "x", name: "X Premium", dueDate: "2026-11-02", plannedAmount: 11 })],
+    transactions: [txn({ id: "big", name: "X CORP PREMIUM", amount: 40, date: "2026-11-03" })],
+  });
+
+  assert.equal(plan.matches.length, 0);
+  assert.equal(plan.prompts[0].choices.filter((choice) => choice.action === "assign").length, 0);
+  assert.match(plan.prompts[0].detail, /No matching charge/);
+});
+
+test("close due dates match the closer amount instead of asking", () => {
+  const plan = planReconciliation({
+    today: "2026-11-02",
+    dismissedPromptIds: [],
+    bills: [
+      bill({ instanceId: "a_2026-11-02", commitmentId: "a", name: "Verizon", dueDate: "2026-11-02", plannedAmount: 130 }),
+      bill({ instanceId: "b_2026-11-04", commitmentId: "b", name: "Verizon", dueDate: "2026-11-04", plannedAmount: 150 }),
+    ],
+    transactions: [txn({ id: "charge", name: "VERIZON WIRELESS", amount: 148, date: "2026-11-03" })],
+  });
+
+  assert.equal(plan.prompts.length, 0);
+  assert.equal(plan.matches[0]?.instanceId, "b_2026-11-04");
+  assert.equal(plan.matches[0]?.transactionId, "charge");
+});
+
+test("a due date that leads by 4 days still wins over a closer amount", () => {
+  const plan = planReconciliation({
+    today: "2026-11-20",
+    dismissedPromptIds: [],
+    bills: [bill({ instanceId: "v_2026-11-04", name: "Verizon", dueDate: "2026-11-04", plannedAmount: 80 })],
+    transactions: [
+      txn({ id: "sooner", name: "VERIZON WIRELESS", amount: 110, date: "2026-11-05" }),
+      txn({ id: "later", name: "VERIZON WIRELESS", amount: 80, date: "2026-11-10" }),
+    ],
+  });
+
+  assert.equal(plan.matches[0]?.transactionId, "sooner");
+});
+
+test("a bill paid outside linked accounts is not matched or asked about", () => {
+  const plan = planReconciliation({
+    today: "2026-11-10",
+    dismissedPromptIds: [],
+    bills: [bill({
+      instanceId: "tm_2026-11-02",
+      name: "T-Mobile",
+      dueDate: "2026-11-02",
+      plannedAmount: 140,
+      paidOutside: true,
+      bankMatchTags: ["TMOBILE"],
+    })],
+    transactions: [txn({ id: "tm", name: "TMOBILE*AUTOPAY", amount: 140, date: "2026-11-02" })],
+  });
+
+  assert.equal(plan.matches.length, 0);
+  assert.equal(plan.prompts.length, 0);
+});
+
+test("still owe stays quiet until the question is allowed back", () => {
+  const bills = [bill({ instanceId: "rent_2026-10-01", name: "Rent", dueDate: "2026-10-01", plannedAmount: 2000 })];
+  const quiet = planReconciliation({
+    today: "2026-11-05",
+    dismissedPromptIds: [],
+    quietPromptIds: ["unmatched:rent_2026-10-01"],
+    bills,
+    transactions: [],
+  });
+  assert.equal(quiet.prompts.length, 0);
+
+  const again = planReconciliation({
+    today: "2026-11-09",
+    dismissedPromptIds: [],
+    quietPromptIds: [],
+    bills,
+    transactions: [],
+  });
+  assert.equal(again.prompts[0]?.id, "unmatched:rent_2026-10-01");
+});
+
+test("paid another way, still owe, and skip are one-tap answers", () => {
+  const past: HelpPrompt = {
+    id: "unmatched:rent_2026-10-01",
+    reason: "unmatched_past",
+    title: "Did Rent ($2,000.00) get paid?",
+    detail: "",
+    instanceId: "rent_2026-10-01",
+    choices: [
+      { id: "paid-elsewhere", label: "Yes, paid another way", action: "paid_elsewhere", commitmentId: "rent", instanceId: "rent_2026-10-01" },
+      { id: "still-owe", label: "Not yet, still owe it", action: "still_owe", instanceId: "rent_2026-10-01" },
+      { id: "skip", label: "Skip this month (not due, and not paid)", action: "skip", instanceId: "rent_2026-10-01" },
+    ],
+  };
+  assert.deepEqual(resolveChoiceWork(past, "paid-elsewhere"), {
+    action: "paid_elsewhere",
+    commitmentId: "rent",
+    instanceId: "rent_2026-10-01",
+  });
+  assert.deepEqual(resolveChoiceWork(past, "still-owe"), { action: "still_owe", instanceId: "rent_2026-10-01" });
+  assert.deepEqual(resolveChoiceWork(past, "skip"), { action: "skip", instanceId: "rent_2026-10-01" });
+});
+
+test("a plain shared merchant word is not saved as a bank tag", () => {
+  assert.equal(cleanMerchantTag("APPLE.COM/BILL"), "APPLE");
+  assert.deepEqual(learnBankTag(["Xfinity"], "APPLE.COM/BILL"), ["Xfinity"]);
+  assert.deepEqual(learnBankTag([], "PREMIUM", ["X Premium", "YouTube Premium"]), []);
+  assert.deepEqual(learnBankTag([], "APPLE MUSIC", ["iCloud"]), ["APPLE MUSIC"]);
+  assert.deepEqual(learnBankTag([], "XFINITY AUTOPAY POS"), ["XFINITY"]);
 });
