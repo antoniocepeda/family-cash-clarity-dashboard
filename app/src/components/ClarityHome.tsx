@@ -3,6 +3,7 @@
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
 import { cashBasisExplanation, householdCash, pendingListNote, visiblePending } from "@/lib/cash-balance";
+import { outsideBillKey, outsideBillsToMark } from "@/lib/overdue";
 import { HelpPrompt } from "@/lib/reconcile";
 import { SPEND_BUFFER, buildOutlook, computeSafeToSpend } from "@/lib/safe-spend";
 import { Account, CommitmentWithInstances, LedgerEntry, ProjectionDay } from "@/lib/types";
@@ -20,6 +21,9 @@ interface Props {
   syncing: boolean;
   resolveError?: string | null;
   onResolve?: (promptId: string, choiceId: string) => void;
+  outsideError?: string | null;
+  markedOutsideKeys?: string[];
+  onMarkPaidElsewhere?: (commitmentId: string, dueDate: string, instanceId: string | null) => void;
 }
 
 const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -47,6 +51,9 @@ export default function ClarityHome({
   syncing,
   resolveError = null,
   onResolve,
+  outsideError = null,
+  markedOutsideKeys = [],
+  onMarkPaidElsewhere,
 }: Props) {
   const today = format(new Date(), "yyyy-MM-dd");
   const cash = householdCash(accounts);
@@ -84,6 +91,10 @@ export default function ClarityHome({
         : `Bills fit through ${format(parseISO(outlook.paychecks[outlook.paychecks.length - 1].date), "MMM d")}, and cash is ${outlook.trend === "down" ? "lower" : "about the same"} than at the first paycheck.`;
 
   const outlookTone = !outlook.covered ? "negative" : outlook.onTrack ? "positive" : "warning";
+  const hiddenOutside = new Set(markedOutsideKeys);
+  const outsideBills = outsideBillsToMark(commitments, today).filter(
+    (item) => !hiddenOutside.has(outsideBillKey(item))
+  );
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -216,6 +227,9 @@ export default function ClarityHome({
           <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
             {prompts.length === 1 ? "1 thing to match" : `${prompts.length} things to match`}
           </h2>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">
+            Answering keeps safe to spend accurate. Each bill should end the month confirmed paid or still owed.
+          </p>
           {resolveError && <p className="mt-3 text-sm text-[var(--negative)]">{resolveError}</p>}
           <ul className="mt-4 space-y-4">
             {prompts.map((prompt) => (
@@ -229,14 +243,47 @@ export default function ClarityHome({
                       type="button"
                       disabled={!onResolve}
                       onClick={() => onResolve?.(prompt.id, choice.id)}
-                      className={`btn min-h-11 w-full justify-start px-4 text-left text-sm ${
-                        choice.action === "dismiss" ? "btn-ghost" : "btn-primary"
+                      className={`btn h-auto min-h-11 w-full justify-start whitespace-normal px-4 py-3 text-left text-sm ${
+                        choice.action === "assign" || choice.action === "paid_elsewhere" ? "btn-primary" : "btn-ghost"
                       }`}
                     >
                       {choice.label}
                     </button>
                   ))}
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {outsideBills.length > 0 && (
+        <section className="surface px-5 py-5 sm:px-6">
+          <p className="eyebrow">Paid outside linked accounts</p>
+          <h2 className="mt-1 text-2xl font-medium text-[var(--text)]">
+            {outsideBills.length === 1 ? "1 bill to mark" : `${outsideBills.length} bills to mark`}
+          </h2>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--muted)]">
+            These are paid from an account that is not linked, so they stay off the overdue list. Mark each one when you have paid it.
+          </p>
+          {outsideError && <p className="mt-3 text-sm text-[var(--negative)]">{outsideError}</p>}
+          <ul className="mt-4 space-y-2">
+            {outsideBills.map((item) => (
+              <li key={outsideBillKey(item)} className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] px-3 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--text)]">{item.name}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {fmt(item.amount)} · Due {format(parseISO(item.dueDate), "MMM d")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!onMarkPaidElsewhere}
+                  onClick={() => onMarkPaidElsewhere?.(item.commitmentId, item.dueDate, item.instanceId)}
+                  className="btn btn-ghost min-h-11 shrink-0 px-4 text-sm"
+                >
+                  Mark paid
+                </button>
               </li>
             ))}
           </ul>

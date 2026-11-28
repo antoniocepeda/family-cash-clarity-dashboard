@@ -1,5 +1,6 @@
 import { addDays, format, parseISO, isBefore, isEqual, startOfDay } from "date-fns";
 import { projectionStartingBalance, shouldApplyPendingTransaction } from "./cash-balance";
+import { isPaidOutsideBill } from "./overdue";
 import { expandOccurrenceDates } from "./schedule";
 import { listAccounts, listCommitments, listInstances, listLedger } from "./repositories/firestore";
 
@@ -85,6 +86,9 @@ export async function generateProjection(
 
   for (const commitment of commitments) {
     if (commitment.paid && !commitment.recurrence_rule) continue;
+    // Paid from an account that is not linked, so it does not leave tracked cash
+    // and it does not paint the forecast overdue. Home has the monthly checkbox.
+    if (isPaidOutsideBill(commitment)) continue;
 
     const isSimulated = simulateSet.has(commitment.id);
 
@@ -207,6 +211,7 @@ export async function generateAlerts(userId: string): Promise<{
   const now = new Date();
 
   for (const commitment of commitments) {
+    if (isPaidOutsideBill(commitment)) continue;
     const due = parseISO(commitment.due_date);
     const hoursUntil = (due.getTime() - now.getTime()) / (1000 * 60 * 60);
 

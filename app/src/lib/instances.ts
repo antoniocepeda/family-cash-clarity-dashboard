@@ -87,6 +87,8 @@ export async function materializeRollingInstances(userId: string): Promise<{ ens
       occupied.add(key);
       ensured += 1;
     }
+    // Confirmed on Home instead. Leave the status alone so it does not turn red.
+    if (commitment.paid_outside) continue;
     for (const instance of live) {
       if (
         instance.due_date < todayStr &&

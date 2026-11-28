@@ -3,14 +3,47 @@ import { differenceInCalendarDays, format, parseISO } from "date-fns";
 export const DATE_WINDOW_DAYS = 10;
 /** Auto-match only when the nearest due date is at least this many days closer than the runner-up. */
 export const DATE_TIEBREAK_DAYS = 4;
+/**
+ * Inside that date tie, the closer amount wins when it leads by at least this many dollars.
+ * A few cents is not enough to guess.
+ */
+export const AMOUNT_TIEBREAK_DOLLARS = 1;
 export const AMOUNT_TOLERANCE_RATIO = 0.4;
 export const AMOUNT_TOLERANCE_FLOOR = 50;
+/**
+ * Bills at or under this amount use a tight window: the greater of $5 and 10%.
+ * The old $50 floor was as large as the bill itself, so a $20 subscription could
+ * line up with a coffee charge. Larger bills keep the wider window (the greater
+ * of $50 and 40%) because those amounts move more, such as a $200 phone bill
+ * posting at $246.
+ */
+export const SMALL_BILL_CUTOFF = 50;
+export const SMALL_BILL_TOLERANCE_RATIO = 0.1;
+export const SMALL_BILL_TOLERANCE_FLOOR = 5;
+/** Charge buttons on one overdue-bill question. */
+export const QUESTION_CHARGE_LIMIT = 3;
+/**
+ * After "Not yet, still owe it", hide that question for this many days.
+ * The bill stays owed the whole time, then the question comes back.
+ */
+export const STILL_OWE_REASK_DAYS = 4;
 export const HELP_PROMPT_LIMIT = 8;
 
 const SETTLED = new Set(["paid", "funded", "skipped", "deferred"]);
 const NOISE = new Set([
   "pos", "debit", "credit", "purchase", "payment", "online", "the", "and", "ach", "web",
   "recurring", "autopay", "bill", "pymt", "pmt", "card", "visa", "mastercard",
+  "com", "www", "net", "org", "inc", "llc", "ltd",
+]);
+
+/**
+ * One-word statement tags that match too many different charges.
+ * A specific one-word merchant such as Xfinity is not on this list.
+ */
+const GENERIC_MERCHANT_WORDS = new Set([
+  "apple", "google", "amazon", "amzn", "meta", "microsoft", "samsung",
+  "walmart", "target", "costco", "kroger", "paypal", "venmo", "square",
+  "instacart", "uber", "lyft", "doordash",
 ]);
 
 export type OpenBill = {
@@ -25,6 +58,8 @@ export type OpenBill = {
   bankMatchTags?: string[];
   /** App account id, Plaid account id, or card mask this bill is paid from. */
   accountHint?: string | null;
+  /** Paid from an account that is not linked. Left out of matching. */
+  paidOutside?: boolean;
 };
 
 export type BankTxn = {
@@ -49,7 +84,7 @@ export type AutoMatch = {
 export type HelpChoice = {
   id: string;
   label: string;
-  action: "assign" | "dismiss";
+  action: "assign" | "dismiss" | "paid_elsewhere" | "still_owe" | "skip";
   commitmentId?: string;
   instanceId?: string;
   dueDate?: string;
@@ -65,10 +100,21 @@ export type HelpPrompt = {
   choices: HelpChoice[];
 };
 
+export type ChoiceWork =
+  | { action: "assign"; commitmentId: string; instanceId: string; transactionId: string }
+  | { action: "skip"; instanceId: string }
+  | { action: "paid_elsewhere"; commitmentId: string; instanceId: string }
+  | { action: "still_owe"; instanceId: string }
+  | { action: "dismiss" };
+
+export function amountLimit(planned: number) {
+  const abs = Math.abs(planned);
+  if (abs <= SMALL_BILL_CUTOFF) return Math.max(SMALL_BILL_TOLERANCE_FLOOR, abs * SMALL_BILL_TOLERANCE_RATIO);
+  return Math.max(AMOUNT_TOLERANCE_FLOOR, abs * AMOUNT_TOLERANCE_RATIO);
+}
+
 export function amountWithinTolerance(planned: number, actual: number) {
-  const diff = Math.abs(planned - actual);
-  const limit = Math.max(AMOUNT_TOLERANCE_FLOOR, Math.abs(planned) * AMOUNT_TOLERANCE_RATIO);
-  return diff <= limit + 0.001;
+  return Math.abs(planned - actual) <= amountLimit(planned) + 0.001;
 }
 
 export function withinDateWindow(dueDate: string, txnDate: string, windowDays = DATE_WINDOW_DAYS) {
@@ -128,6 +174,20 @@ export function cleanMerchantTag(merchantName: string): string | null {
   return kept.slice(0, 4).join(" ");
 }
 
+/**
+ * A learned tag is too generic when it is a single word and that word is a
+ * common marketplace name, or another bill already uses the same word.
+ * "Apple" is dropped. "Xfinity" is kept. "Apple Music" is kept because it is
+ * two words. Manual statement names typed on Manage are not filtered here.
+ */
+export function tagIsTooGeneric(tag: string, siblingLabels: readonly string[] = []): boolean {
+  const words = tokens(tag);
+  if (words.length !== 1) return false;
+  const word = words[0];
+  if (GENERIC_MERCHANT_WORDS.has(word)) return true;
+  return siblingLabels.some((label) => tokens(label).includes(word));
+}
+
 /** Parse a comma-separated field or a list into unique statement tags. */
 export function normalizeBankTags(value: unknown): string[] {
   const parts: string[] = [];
@@ -156,7 +216,21 @@ export function normalizeBankTags(value: unknown): string[] {
 /**
  * Append a cleaned merchant name. Existing tags stay as written.
  * The same name with different capitalization is not added again.
+ * Generic single-word tags are not added.
  */
+export function learnBankTag(
+  existing: readonly string[] | null | undefined,
+  merchantName: string,
+  siblingLabels: readonly string[] = [],
+): string[] {
+  const tags = normalizeBankTags(existing);
+  const cleaned = cleanMerchantTag(merchantName);
+  if (!cleaned || tagIsTooGeneric(cleaned, siblingLabels)) return tags;
+  const key = compact(cleaned);
+  if (tags.some((tag) => compact(tag) === key)) return tags;
+  return [...tags, cleaned];
+}
+
 export function normalizeAccountHint(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -176,15 +250,6 @@ export function accountHintRelation(
   if (keys.length === 0) return "unknown";
   const matched = keys.some((key) => key === hintKey || (hintKey.length >= 4 && key.endsWith(hintKey)) || (key.length >= 4 && hintKey.endsWith(key)));
   return matched ? "match" : "mismatch";
-}
-
-export function learnBankTag(existing: readonly string[] | null | undefined, merchantName: string): string[] {
-  const tags = normalizeBankTags(existing);
-  const cleaned = cleanMerchantTag(merchantName);
-  if (!cleaned) return tags;
-  const key = compact(cleaned);
-  if (tags.some((tag) => compact(tag) === key)) return tags;
-  return [...tags, cleaned];
 }
 
 function money(amount: number) {
@@ -209,27 +274,51 @@ function viablePairs(group: Pair[]): Pair[] {
   return hinted.length > 0 ? hinted : allowed;
 }
 
-/** Closest due date wins when it leads by DATE_TIEBREAK_DAYS. A single option always wins. */
+/**
+ * Closest due date wins when it leads by DATE_TIEBREAK_DAYS.
+ * When dates are closer than that, the closer amount wins if it leads by
+ * AMOUNT_TIEBREAK_DOLLARS. Otherwise the owner is asked.
+ * A single option always wins.
+ */
 function clearWinner(group: Pair[]): Pair | null {
   const options = [...viablePairs(group)].sort(
-    (a, b) => a.dayDiff - b.dayDiff || b.nameScore - a.nameScore || a.bill.instanceId.localeCompare(b.bill.instanceId)
+    (a, b) =>
+      a.dayDiff - b.dayDiff ||
+      a.amountDiff - b.amountDiff ||
+      b.nameScore - a.nameScore ||
+      a.bill.instanceId.localeCompare(b.bill.instanceId) ||
+      a.txn.id.localeCompare(b.txn.id)
   );
   if (options.length === 0) return null;
   if (options.length === 1) return options[0];
   if (options[1].dayDiff - options[0].dayDiff >= DATE_TIEBREAK_DAYS) return options[0];
+
+  const cluster = options
+    .filter((option) => option.dayDiff - options[0].dayDiff < DATE_TIEBREAK_DAYS)
+    .sort(
+      (a, b) =>
+        a.amountDiff - b.amountDiff ||
+        a.dayDiff - b.dayDiff ||
+        b.nameScore - a.nameScore ||
+        a.bill.instanceId.localeCompare(b.bill.instanceId) ||
+        a.txn.id.localeCompare(b.txn.id)
+    );
+  if (cluster.length === 1) return cluster[0];
+  if (cluster[1].amountDiff - cluster[0].amountDiff >= AMOUNT_TIEBREAK_DOLLARS) return cluster[0];
   return null;
 }
 
-function candidatePairs(bills: OpenBill[], txns: BankTxn[], requireName: boolean): Pair[] {
+function candidatePairs(bills: OpenBill[], txns: BankTxn[]): Pair[] {
   const pairs: Pair[] = [];
   for (const txn of txns) {
     if (txn.pending || txn.linked || txn.amount <= 0) continue;
     for (const bill of bills) {
+      if (bill.paidOutside) continue;
       if (bill.type !== "bill" || SETTLED.has(bill.status)) continue;
       if (!withinDateWindow(bill.dueDate, txn.date)) continue;
       if (!amountWithinTolerance(bill.plannedAmount, txn.amount)) continue;
       const nameScore = merchantScore(bill.name, txn.name, bill.bankMatchTags ?? []);
-      if (requireName && nameScore <= 0) continue;
+      if (nameScore <= 0) continue;
       pairs.push({
         bill,
         txn,
@@ -254,6 +343,18 @@ function billChoice(bill: OpenBill, txn: BankTxn): HelpChoice {
   };
 }
 
+function chargeChoice(bill: OpenBill, txn: BankTxn): HelpChoice {
+  return {
+    id: `txn:${txn.id}`,
+    label: `Yes, this charge · ${txn.name} · ${money(txn.amount)} · ${shortDate(txn.date)}`,
+    action: "assign",
+    commitmentId: bill.commitmentId,
+    instanceId: bill.instanceId,
+    dueDate: bill.dueDate,
+    transactionId: txn.id,
+  };
+}
+
 export function withoutPrompt<T extends { id: string }>(prompts: T[], promptId: string): T[] {
   return prompts.filter((prompt) => prompt.id !== promptId);
 }
@@ -264,10 +365,7 @@ export function restorePrompt<T extends { id: string }>(prompts: T[], prompt: T)
 }
 
 /** The writes for one tap. A full reconcile is not part of this step. */
-export function resolveChoiceWork(prompt: HelpPrompt, choiceId: string):
-  | { action: "assign"; commitmentId: string; instanceId: string; transactionId: string }
-  | { action: "skip"; instanceId: string }
-  | { action: "dismiss" } {
+export function resolveChoiceWork(prompt: HelpPrompt, choiceId: string): ChoiceWork {
   const choice = prompt.choices.find((item) => item.id === choiceId);
   if (!choice) throw new Error("Choice not found");
   if (choice.action === "assign") {
@@ -279,6 +377,22 @@ export function resolveChoiceWork(prompt: HelpPrompt, choiceId: string):
       transactionId: choice.transactionId,
     };
   }
+  if (choice.action === "paid_elsewhere") {
+    const instanceId = choice.instanceId || prompt.instanceId;
+    if (!instanceId || !choice.commitmentId) throw new Error("Choice is incomplete");
+    return { action: "paid_elsewhere", commitmentId: choice.commitmentId, instanceId };
+  }
+  if (choice.action === "still_owe") {
+    const instanceId = choice.instanceId || prompt.instanceId;
+    if (!instanceId) throw new Error("Choice is incomplete");
+    return { action: "still_owe", instanceId };
+  }
+  if (choice.action === "skip") {
+    const instanceId = choice.instanceId || prompt.instanceId;
+    if (!instanceId) throw new Error("Choice is incomplete");
+    return { action: "skip", instanceId };
+  }
+  // Older saved questions used Dismiss on a past bill to mean skip this month.
   if (prompt.reason === "unmatched_past") {
     const instanceId = choice.instanceId || prompt.instanceId;
     if (instanceId) return { action: "skip", instanceId };
@@ -286,14 +400,30 @@ export function resolveChoiceWork(prompt: HelpPrompt, choiceId: string):
   return { action: "dismiss" };
 }
 
+/**
+ * Every bill each month ends up either confirmed paid or flagged as still owed,
+ * so safe-to-spend and the overdue alerts can be trusted. The owner is only
+ * asked when the app truly can't tell, and answering takes one tap.
+ *
+ * A past-due bill with no linked payment asks "Did <name> ($amount) get paid?"
+ * and offers at most three charges that match the bill name or a saved bank
+ * name, closest amount first. "Yes, paid another way" marks that month paid
+ * with no bank transaction (status paid, paid_elsewhere). "Not yet, still owe
+ * it" leaves the bill owed and hides the question for STILL_OWE_REASK_DAYS.
+ * "Skip this month" means it was not due and not paid. Bills flagged paid
+ * outside linked accounts are not matched and are not asked about.
+ */
 export function planReconciliation(input: {
   bills: OpenBill[];
   transactions: BankTxn[];
   today: string;
   dismissedPromptIds: string[];
+  /** Questions the owner snoozed with "still owe". Hidden until the re-ask date. */
+  quietPromptIds?: string[];
 }): { matches: AutoMatch[]; prompts: HelpPrompt[] } {
   const dismissed = new Set(input.dismissedPromptIds);
-  const namedPairs = candidatePairs(input.bills, input.transactions, true);
+  const quiet = new Set(input.quietPromptIds ?? []);
+  const namedPairs = candidatePairs(input.bills, input.transactions);
   const assignedBills = new Set<string>();
   const assignedTxns = new Set<string>();
   const matches: AutoMatch[] = [];
@@ -370,43 +500,79 @@ export function planReconciliation(input: {
     });
   }
 
-  const loosePairs = candidatePairs(input.bills, input.transactions, false);
   for (const bill of input.bills) {
+    if (bill.paidOutside) continue;
     if (bill.type !== "bill" || SETTLED.has(bill.status) || assignedBills.has(bill.instanceId)) continue;
     if (ambiguousBills.has(bill.instanceId)) continue;
     if (bill.dueDate >= input.today) continue;
     const id = `unmatched:${bill.instanceId}`;
-    if (dismissed.has(id)) continue;
-    const choices = new Map<string, HelpChoice>();
-    for (const pair of loosePairs) {
-      if (pair.bill.instanceId !== bill.instanceId) continue;
-      if (assignedTxns.has(pair.txn.id) || ambiguousTxns.has(pair.txn.id)) continue;
-      choices.set(pair.txn.id, {
-        id: `txn:${pair.txn.id}`,
-        label: `${pair.txn.name} · ${money(pair.txn.amount)} · ${shortDate(pair.txn.date)}`,
-        action: "assign",
-        commitmentId: bill.commitmentId,
-        instanceId: bill.instanceId,
-        dueDate: bill.dueDate,
-        transactionId: pair.txn.id,
-      });
+    if (dismissed.has(id) || quiet.has(id)) continue;
+    const charges = viablePairs(
+      namedPairs.filter(
+        (pair) =>
+          pair.bill.instanceId === bill.instanceId &&
+          !assignedTxns.has(pair.txn.id) &&
+          !ambiguousTxns.has(pair.txn.id)
+      )
+    )
+      .sort(
+        (a, b) =>
+          a.amountDiff - b.amountDiff ||
+          a.dayDiff - b.dayDiff ||
+          a.txn.date.localeCompare(b.txn.date) ||
+          a.txn.id.localeCompare(b.txn.id)
+      )
+      .slice(0, QUESTION_CHARGE_LIMIT);
+    const seen = new Set<string>();
+    const chargeChoices: HelpChoice[] = [];
+    for (const pair of charges) {
+      if (seen.has(pair.txn.id)) continue;
+      seen.add(pair.txn.id);
+      chargeChoices.push(chargeChoice(bill, pair.txn));
     }
     prompts.push({
       id,
       reason: "unmatched_past",
-      title: `${bill.name} was due ${shortDate(bill.dueDate)}`,
-      detail: `${money(bill.plannedAmount)} is still open and no payment matched it.`,
+      title: `Did ${bill.name} (${money(bill.plannedAmount)}) get paid?`,
+      detail: chargeChoices.length > 0
+        ? `Due ${shortDate(bill.dueDate)}.`
+        : `Due ${shortDate(bill.dueDate)}. No matching charge in the linked accounts.`,
       instanceId: bill.instanceId,
       choices: [
-        ...choices.values(),
-        { id: "dismiss", label: "Dismiss", action: "dismiss", instanceId: bill.instanceId, commitmentId: bill.commitmentId },
+        ...chargeChoices,
+        {
+          id: "paid-elsewhere",
+          label: "Yes, paid another way",
+          action: "paid_elsewhere",
+          commitmentId: bill.commitmentId,
+          instanceId: bill.instanceId,
+          dueDate: bill.dueDate,
+        },
+        {
+          id: "still-owe",
+          label: "Not yet, still owe it",
+          action: "still_owe",
+          commitmentId: bill.commitmentId,
+          instanceId: bill.instanceId,
+          dueDate: bill.dueDate,
+        },
+        {
+          id: "skip",
+          label: "Skip this month (not due, and not paid)",
+          action: "skip",
+          commitmentId: bill.commitmentId,
+          instanceId: bill.instanceId,
+          dueDate: bill.dueDate,
+        },
       ],
     });
   }
 
+  const dueOf = (prompt: HelpPrompt) =>
+    prompt.choices.find((choice) => choice.dueDate)?.dueDate ?? prompt.instanceId ?? prompt.id;
   const ranked = prompts.sort((a, b) => {
     if (a.reason !== b.reason) return a.reason === "ambiguous" ? -1 : 1;
-    return (b.instanceId ?? b.id).localeCompare(a.instanceId ?? a.id);
+    return dueOf(a).localeCompare(dueOf(b)) || (a.instanceId ?? a.id).localeCompare(b.instanceId ?? b.id);
   });
 
   return { matches, prompts: ranked.slice(0, HELP_PROMPT_LIMIT) };

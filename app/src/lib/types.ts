@@ -27,6 +27,11 @@ export interface Commitment {
   bank_match_tags?: string[];
   /** App account id, Plaid id, or card mask this subscription is paid from. */
   account_hint?: string | null;
+  /**
+   * Paid from an account that is not linked. No match questions and no overdue alert.
+   * Missing or false keeps the previous match-and-alert behavior.
+   */
+  paid_outside?: boolean;
   priority: "critical" | "normal" | "flexible";
   autopay: number;
   account_id: string | null;
@@ -128,6 +133,8 @@ export interface CommitmentInstance {
   status: "planned" | "paid" | "partially_funded" | "deferred" | "skipped" | "overdue" | "open" | "funded";
   edited_from_template?: boolean;
   paid_date?: string | null;
+  /** Paid with no linked bank transaction. Projections treat status paid as settled. */
+  paid_elsewhere?: boolean;
   created_at?: string;
   commitment_name?: string;
   commitment_type?: "income" | "bill";

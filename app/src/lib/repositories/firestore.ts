@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { format } from "date-fns";
 import { getFirebaseAdminFirestore } from "@/lib/firebase-admin";
 import { planFutureDueDateEdit } from "@/lib/instance-edit";
+import { isPaidOutside } from "@/lib/overdue";
 import { learnBankTag, normalizeAccountHint, normalizeBankTags, type HelpPrompt } from "@/lib/reconcile";
 import { normalizeRecurrenceCount, normalizeRecurrenceEnd } from "@/lib/schedule";
 import {
@@ -98,6 +99,7 @@ function normalizeCommitment(id: string, data: FirebaseFirestore.DocumentData): 
     recurrence_count: normalizeRecurrenceCount(data.recurrence_count ?? data.recurrenceCount ?? null),
     bank_match_tags: normalizeBankTags(data.bank_match_tags ?? data.bankMatchTags ?? null),
     account_hint: normalizeAccountHint(data.account_hint ?? data.accountHint ?? null),
+    paid_outside: isPaidOutside(data.paid_outside ?? data.paidOutside),
     priority: (data.priority ?? "normal") as Commitment["priority"],
     autopay: isTruthyNumber(data.autopay),
     account_id: (data.account_id ?? data.accountId ?? null) as string | null,
@@ -125,6 +127,7 @@ function normalizeInstance(id: string, data: FirebaseFirestore.DocumentData): Co
     status: (data.status ?? "open") as CommitmentInstance["status"],
     edited_from_template: Boolean(data.edited_from_template ?? data.editedFromTemplate ?? false),
     paid_date: (data.paid_date ?? data.paidDate ?? null) as string | null,
+    paid_elsewhere: Boolean(data.paid_elsewhere ?? data.paidElsewhere ?? false),
     created_at: data.created_at as string | undefined,
     commitment_name: data.commitment_name as string | undefined,
     commitment_type: data.commitment_type as CommitmentInstance["commitment_type"],
@@ -290,6 +293,8 @@ export async function createCommitment(userId: string, body: Partial<Commitment>
     bankMatchTags: normalizeBankTags(body.bank_match_tags ?? (body as { bank_match_tag?: unknown }).bank_match_tag),
     account_hint: normalizeAccountHint((body as { account_hint?: unknown }).account_hint),
     accountHint: normalizeAccountHint((body as { account_hint?: unknown }).account_hint),
+    paid_outside: isPaidOutside(body.paid_outside) ? 1 : 0,
+    paidOutside: isPaidOutside(body.paid_outside),
     priority: body.priority || "normal",
     autopay: body.autopay ? 1 : 0,
     account_id: body.account_id || null,
@@ -303,7 +308,7 @@ export async function createCommitment(userId: string, body: Partial<Commitment>
 }
 
 export async function updateCommitment(userId: string, body: Partial<Commitment> & { id: string; bank_match_tag?: unknown }) {
-  const limits: Record<string, string | number | string[] | null> = {};
+  const limits: Record<string, string | number | boolean | string[] | null> = {};
   if ("recurrence_end_date" in body) {
     const end = normalizeRecurrenceEnd(body.recurrence_end_date);
     limits.recurrence_end_date = end;
@@ -323,6 +328,11 @@ export async function updateCommitment(userId: string, body: Partial<Commitment>
     const hint = normalizeAccountHint(body.account_hint);
     limits.account_hint = hint;
     limits.accountHint = hint;
+  }
+  if ("paid_outside" in body) {
+    const outside = isPaidOutside(body.paid_outside);
+    limits.paid_outside = outside ? 1 : 0;
+    limits.paidOutside = outside;
   }
   await collection(userId, COLLECTIONS.commitments).doc(body.id).set(
     {
@@ -349,9 +359,13 @@ export async function updateCommitment(userId: string, body: Partial<Commitment>
 
 /** Remember a merchant string on a bill without changing its display name or other tags. */
 export async function addBankMatchTag(userId: string, commitmentId: string, merchantName: string) {
-  const commitment = await getCommitment(userId, commitmentId);
+  const commitments = await listCommitments(userId, false);
+  const commitment = commitments.find((item) => item.id === commitmentId);
   if (!commitment) return null;
-  const next = learnBankTag(commitment.bank_match_tags, merchantName);
+  const siblings = commitments
+    .filter((item) => item.id !== commitmentId)
+    .flatMap((item) => [item.name, ...(item.bank_match_tags ?? [])]);
+  const next = learnBankTag(commitment.bank_match_tags, merchantName, siblings);
   const current = commitment.bank_match_tags ?? [];
   if (next.length === current.length && next.every((tag, index) => tag === current[index])) return commitment;
   await collection(userId, COLLECTIONS.commitments).doc(commitmentId).set(
@@ -566,6 +580,63 @@ export async function skipInstance(userId: string, instanceId: string) {
   );
 }
 
+/**
+ * Mark one month paid with no bank transaction. Status stays "paid" so forecasts
+ * and overdue checks treat it as settled. paid_elsewhere records that nothing
+ * was linked, and no ledger row is written, so linked balances do not change.
+ * Pass the stored instance id when the occurrence already exists. A one-time
+ * due-date edit keeps the original document id, so deriving a new id from the
+ * edited date would create a second unpaid copy.
+ */
+export async function markInstancePaidElsewhere(
+  userId: string,
+  input: { instanceId?: string; commitmentId?: string; dueDate?: string }
+) {
+  let id = input.instanceId?.trim() || "";
+  let commitmentId = input.commitmentId;
+  if (!id) {
+    if (!commitmentId || !input.dueDate) throw new Error("Instance not found");
+    const commitment = await getCommitment(userId, commitmentId);
+    if (!commitment) throw new Error("not found");
+    id = await ensureInstance(userId, commitmentId, input.dueDate, commitment.amount);
+  }
+  const ref = collection(userId, COLLECTIONS.commitmentInstances).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("Instance not found");
+  const inst = normalizeInstance(snap.id, snap.data()!);
+  if (commitmentId && inst.commitment_id !== commitmentId) throw new Error("Instance not found");
+  if (inst.status === "paid" || inst.status === "funded" || inst.status === "skipped") return { alreadySettled: true };
+
+  commitmentId = commitmentId || inst.commitment_id;
+  const commitment = await getCommitment(userId, commitmentId);
+  const paidDate = format(new Date(), "yyyy-MM-dd");
+  const amount = inst.planned_amount;
+  await ref.set(
+    {
+      ...stampUpdate(),
+      allocated_amount: amount,
+      allocatedAmount: amount,
+      actual_amount: amount,
+      actualAmount: amount,
+      remaining_amount: 0,
+      remainingAmount: 0,
+      status: "paid",
+      paid_elsewhere: true,
+      paidElsewhere: true,
+      paid_date: paidDate,
+      paidDate,
+    },
+    { merge: true }
+  );
+  if (commitment && !commitment.recurrence_rule) {
+    await collection(userId, COLLECTIONS.commitments).doc(commitment.id).set(
+      { ...stampUpdate(), paid: 1, actual_amount: amount, actualAmount: amount, paid_date: paidDate, paidDate },
+      { merge: true }
+    );
+  }
+  return { alreadySettled: false };
+}
+
 export async function closeInstanceAsPaid(
   userId: string,
   input: { instanceId: string; ledgerId: string; commitmentId: string; actualAmount: number }
@@ -606,6 +677,8 @@ export async function closeInstanceAsPaid(
       remaining_amount: 0,
       remainingAmount: 0,
       status: "paid",
+      paid_elsewhere: false,
+      paidElsewhere: false,
       paid_date: paidDate,
       paidDate,
     },
@@ -618,7 +691,8 @@ export async function closeInstanceAsPaid(
   return { alreadySettled: false };
 }
 
-function normalizeReconcilePrompt(id: string, data: FirebaseFirestore.DocumentData): HelpPrompt & { status: string } {
+function normalizeReconcilePrompt(id: string, data: FirebaseFirestore.DocumentData): HelpPrompt & { status: string; reaskAfter: string | null } {
+  const reask = data.reask_after ?? data.reaskAfter;
   return {
     id,
     reason: data.reason === "ambiguous" ? "ambiguous" : "unmatched_past",
@@ -627,6 +701,7 @@ function normalizeReconcilePrompt(id: string, data: FirebaseFirestore.DocumentDa
     instanceId: (data.instance_id ?? data.instanceId ?? undefined) as string | undefined,
     choices: Array.isArray(data.choices) ? data.choices : [],
     status: String(data.status ?? "open"),
+    reaskAfter: typeof reask === "string" && reask ? reask : null,
   };
 }
 
@@ -642,15 +717,25 @@ export async function getLedgerEntry(userId: string, id: string) {
   return normalizeLedger(snap.id, snap.data()!);
 }
 
-export async function listReconcilePromptDocs(userId: string): Promise<(HelpPrompt & { status: string })[]> {
+export async function listReconcilePromptDocs(userId: string): Promise<(HelpPrompt & { status: string; reaskAfter: string | null })[]> {
   const snap = await collection(userId, COLLECTIONS.reconcilePrompts).get();
   return snap.docs.map((doc) => normalizeReconcilePrompt(doc.id, doc.data()));
 }
 
-export async function saveReconcilePrompt(userId: string, prompt: HelpPrompt, status: "open" | "dismissed" | "resolved") {
+export async function saveReconcilePrompt(
+  userId: string,
+  prompt: HelpPrompt,
+  status: "open" | "dismissed" | "resolved",
+  today?: string,
+) {
   const ref = collection(userId, COLLECTIONS.reconcilePrompts).doc(prompt.id);
   const existing = await ref.get();
-  if (existing.exists && existing.data()?.status === "dismissed" && status === "open") return;
+  const previous = existing.data();
+  if (existing.exists && previous?.status === "dismissed" && status === "open") return;
+  if (existing.exists && previous?.status === "snoozed" && status === "open") {
+    const reask = typeof previous.reask_after === "string" ? previous.reask_after : typeof previous.reaskAfter === "string" ? previous.reaskAfter : "";
+    if (today && reask > today) return;
+  }
   await ref.set(
     {
       ...(existing.exists ? stampUpdate() : stampCreate(userId)),
@@ -661,13 +746,23 @@ export async function saveReconcilePrompt(userId: string, prompt: HelpPrompt, st
       instanceId: prompt.instanceId ?? null,
       choices: JSON.parse(JSON.stringify(prompt.choices)),
       status,
+      reask_after: null,
+      reaskAfter: null,
     },
     { merge: true }
   );
 }
 
-export async function setReconcilePromptStatus(userId: string, id: string, status: "open" | "dismissed" | "resolved") {
-  await collection(userId, COLLECTIONS.reconcilePrompts).doc(id).set({ ...stampUpdate(), status }, { merge: true });
+export async function setReconcilePromptStatus(
+  userId: string,
+  id: string,
+  status: "open" | "dismissed" | "resolved" | "snoozed",
+  reaskAfter?: string | null,
+) {
+  await collection(userId, COLLECTIONS.reconcilePrompts).doc(id).set(
+    { ...stampUpdate(), status, reask_after: reaskAfter ?? null, reaskAfter: reaskAfter ?? null },
+    { merge: true }
+  );
 }
 
 export async function updateCommitmentInstance(

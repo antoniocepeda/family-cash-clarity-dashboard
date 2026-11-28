@@ -10,6 +10,7 @@ import AgentActivity from "@/components/AgentActivity";
 import { readJsonArray } from "@/lib/api-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { outsideBillKey } from "@/lib/overdue";
 import { HelpPrompt, restorePrompt, withoutPrompt } from "@/lib/reconcile";
 import { BACKGROUND_SYNC_MS, STALE_SYNC_MS, SYNC_FOLLOW_UP_MS } from "@/lib/schedule";
 import { Account, AllocationInput, CommitmentInstance, CommitmentWithInstances, LedgerEntry, LedgerItemInput, PlaidItem, ProjectionDay } from "@/lib/types";
@@ -31,6 +32,8 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [outsideError, setOutsideError] = useState<string | null>(null);
+  const [markedOutside, setMarkedOutside] = useState<string[]>([]);
   const [projectionDays, setProjectionDays] = useState<14 | 30 | 60 | 90 | 120 | 150 | 180>(30);
   const [includePending, setIncludePending] = useState(true);
 
@@ -236,6 +239,41 @@ export default function Dashboard() {
     }
   }, [fetchProjection]);
 
+  const handleMarkPaidElsewhere = async (commitmentId: string, dueDate: string, instanceId: string | null) => {
+    const key = outsideBillKey({ commitmentId, dueDate, instanceId });
+    setOutsideError(null);
+    setMarkedOutside((current) => (current.includes(key) ? current : [...current, key]));
+    try {
+      const res = await authFetch("/api/commitments/mark-paid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: commitmentId,
+          instance_due_date: dueDate,
+          instance_id: instanceId,
+          paid_elsewhere: true,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMarkedOutside((current) => current.filter((item) => item !== key));
+        setOutsideError(typeof body.error === "string" ? body.error : "Could not mark that bill paid");
+        return;
+      }
+      const [cmtRes, proj, trendProj] = await Promise.all([
+        authFetch("/api/commitments"),
+        fetchProjection(),
+        fetchProjection(180, true),
+      ]);
+      setCommitments(await readJsonArray<CommitmentWithInstances>(cmtRes, "Commitments fetch"));
+      setProjection(proj);
+      setTrendProjection(trendProj);
+    } catch (err) {
+      setMarkedOutside((current) => current.filter((item) => item !== key));
+      setOutsideError(err instanceof Error ? err.message : "Could not mark that bill paid");
+    }
+  };
+
   const handleResolvePrompt = async (promptId: string, choiceId: string) => {
     const removed = prompts.find((prompt) => prompt.id === promptId);
     setResolveError(null);
@@ -334,6 +372,9 @@ export default function Dashboard() {
           syncing={syncing}
           resolveError={resolveError}
           onResolve={user ? handleResolvePrompt : undefined}
+          outsideError={outsideError}
+          markedOutsideKeys={markedOutside}
+          onMarkPaidElsewhere={user ? handleMarkPaidElsewhere : undefined}
         />
 
         <div>
